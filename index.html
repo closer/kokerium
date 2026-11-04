@@ -83,7 +83,7 @@
       <canvas id="board"></canvas>
       <div id="overlay">
         <h2 id="ov-title">こけりうむ</h2>
-        <p id="ov-text">苔を積んで、そろった段は瓶に根づく。<br>のんびりどうぞ。</p>
+        <p id="ov-text">同じ苔を4つ以上つなげると、根づいて瓶に植わる。<br>上の苔が落ちて、またつながることも。</p>
         <button id="ov-btn">はじめる</button>
       </div>
     </div>
@@ -105,7 +105,7 @@
       </div>
       <dl class="stats">
         <dt>スコア</dt><dd id="score">0</dd>
-        <dt>段</dt><dd id="lines">0</dd>
+        <dt>根づいた</dt><dd id="lines">0</dd>
         <dt>レベル</dt><dd id="level">1</dd>
         <dt>ベスト</dt><dd id="best">0</dd>
       </dl>
@@ -121,7 +121,7 @@
     <div class="help">
       ← → 移動 ／ ↓ ゆっくり落とす ／ Space 一気に落とす<br>
       ↑ / X 右回転 ／ Z 左回転 ／ P 一時停止<br>
-      段をそろえると、その苔や小物が瓶に増えていく。瓶はブラウザに保存される。
+      同じ苔を4つ以上つなげると根づいて消え、瓶に植わる。連鎖すると小物、3連鎖で珍しいものも。瓶はブラウザに保存される。
     </div>
   </div>
 </div>
@@ -130,7 +130,7 @@
 (() => {
   'use strict';
 
-  const COLS = 10, ROWS = 20, S = 28;
+  const COLS = 8, ROWS = 16, S = 32;
   const DPR = Math.min(window.devicePixelRatio || 1, 2);
   const $ = (id) => document.getElementById(id);
 
@@ -166,26 +166,16 @@
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
   };
 
-  // ---- Moss types (one per tetromino) ----
+  // ---- Moss types ----
   const MOSS = [
-    { name: 'スナゴケ',         base: '#a3c94a', dark: '#6f9325', light: '#d6ec8a', style: 'star' },
+    { name: 'スナゴケ',         base: '#c2cf3a', dark: '#8a9520', light: '#e8f08a', style: 'star' },
     { name: 'ハイゴケ',         base: '#5f9e3f', dark: '#3d6f27', light: '#8fc56a', style: 'creep' },
-    { name: 'タマゴケ',         base: '#86b86a', dark: '#58854a', light: '#b9dc9c', style: 'ball' },
-    { name: 'ヒノキゴケ',       base: '#3f8a4e', dark: '#285e34', light: '#76bd80', style: 'tree' },
+    { name: 'タマゴケ',         base: '#5fc08a', dark: '#2f8a5c', light: '#a8e6c0', style: 'ball' },
+    { name: 'ヒノキゴケ',       base: '#2f6e3e', dark: '#1d4a29', light: '#5fa86c', style: 'tree' },
     { name: 'ホソバオキナゴケ', base: '#a9c7a1', dark: '#7a9c74', light: '#e0efdb', style: 'cushion' },
     { name: 'コツボゴケ',       base: '#6cc06f', dark: '#3f8c45', light: '#aee6aa', style: 'leaf' },
     { name: 'シッポゴケ',       base: '#4f7f3a', dark: '#33572a', light: '#8bb86a', style: 'tail' },
   ];
-  const SHAPES = [
-    [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], // I
-    [[1,1],[1,1]],                             // O
-    [[0,1,0],[1,1,1],[0,0,0]],                 // T
-    [[0,1,1],[1,1,0],[0,0,0]],                 // S
-    [[1,1,0],[0,1,1],[0,0,0]],                 // Z
-    [[1,0,0],[1,1,1],[0,0,0]],                 // J
-    [[0,0,1],[1,1,1],[0,0,0]],                 // L
-  ];
-
   // ---- Moss detail painters (cell-local, size S) ----
   const STYLE = {
     star(g, r, m) {
@@ -285,11 +275,24 @@
   }
 
   // ---- Game state ----
+  // Pieces are 2-3 cells, each cell its own moss. Same moss connected 4+ takes root and clears.
+  // Cell code: 1 + t*8 + seed(0..7); 0 = empty.
+  const ACTIVE = [0, 2, 3, 4];
+  const SHAPES = [
+    [[1,1],[0,0]],
+    [[1,1],[0,0]],
+    [[0,0,0],[1,1,1],[0,0,0]],
+    [[1,0],[1,1]],
+  ];
+  const enc = (t) => 1 + t * 8 + ((Math.random() * 8) | 0);
+  const decT = (c) => (c - 1) >> 3;
+  const decV = (c) => ((c - 1) & 7) + 1;
+
   let state = 'title';
-  let grid, cur, next, bag, score, lines, level, dropAcc, lockT, lockResets, clearing;
+  let grid, cur, next, score, rooted, level, dropAcc, lockT, lockResets, phase, chain;
   let best = store.get('kokerium.best', 0);
   let particles = [];
-  const motes = Array.from({ length: 22 }, () => ({
+  const motes = Array.from({ length: 18 }, () => ({
     x: Math.random() * COLS * S, y: Math.random() * ROWS * S,
     v: 4 + Math.random() * 8, r: .6 + Math.random() * 1.4, p: Math.random() * 6,
   }));
@@ -297,16 +300,10 @@
   const rotCW = (m) => m[0].map((_, i) => m.map((row) => row[i]).reverse());
   const rotCCW = (m) => m[0].map((_, i) => m.map((row) => row[row.length - 1 - i]));
 
-  function nextType() {
-    if (!bag.length) {
-      bag = [0, 1, 2, 3, 4, 5, 6];
-      for (let i = bag.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [bag[i], bag[j]] = [bag[j], bag[i]]; }
-    }
-    return bag.pop();
-  }
   function newPiece() {
-    const t = nextType();
-    return { t, m: SHAPES[t].map((row) => row.map((c) => (c ? 1 + ((Math.random() * 8) | 0) : 0))), x: 0, y: 0 };
+    const shape = SHAPES[(Math.random() * SHAPES.length) | 0];
+    const pick = () => ACTIVE[(Math.random() * ACTIVE.length) | 0];
+    return { m: shape.map((row) => row.map((c) => (c ? enc(pick()) : 0))), x: 0, y: 0 };
   }
   function collide(m, x, y) {
     for (let r = 0; r < m.length; r++) for (let c = 0; c < m[r].length; c++) {
@@ -319,8 +316,8 @@
   }
 
   function reset() {
-    grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
-    bag = []; score = 0; lines = 0; level = 1; clearing = null; particles = [];
+    grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+    score = 0; rooted = 0; level = 1; phase = null; chain = 0; particles = [];
     next = newPiece();
     spawn();
     updateStats();
@@ -328,7 +325,7 @@
   function spawn() {
     cur = next; next = newPiece();
     cur.x = ((COLS - cur.m[0].length) / 2) | 0;
-    cur.y = cur.t === 0 ? -1 : 0;
+    cur.y = -cur.m.findIndex((row) => row.some(Boolean));
     dropAcc = 0; lockT = 0; lockResets = 0;
     drawNext();
     if (collide(cur.m, cur.x, cur.y)) gameOver();
@@ -343,7 +340,7 @@
   function rotate(dir) {
     if (!cur) return;
     const m2 = dir > 0 ? rotCW(cur.m) : rotCCW(cur.m);
-    for (const [kx, ky] of [[0,0],[-1,0],[1,0],[-2,0],[2,0],[0,-1]]) {
+    for (const [kx, ky] of [[0,0],[-1,0],[1,0],[0,-1]]) {
       if (!collide(m2, cur.x + kx, cur.y + ky)) { cur.m = m2; cur.x += kx; cur.y += ky; touchLock(); return; }
     }
   }
@@ -359,50 +356,70 @@
       if (!v) continue;
       const ny = cur.y + r;
       if (ny < 0) { gameOver(); return; }
-      grid[ny][cur.x + c] = { t: cur.t, v };
+      grid[ny][cur.x + c] = v;
     }
-    cur = null;
-    const full = [];
-    grid.forEach((row, i) => { if (row.every(Boolean)) full.push(i); });
-    if (full.length) {
-      clearing = { rows: full, t: 0 };
-      for (const y of full) for (let x = 0; x < COLS; x++) {
-        const m = MOSS[grid[y][x].t];
-        for (let k = 0; k < 3; k++) particles.push({
-          x: x * S + Math.random() * S, y: y * S + Math.random() * S,
-          vx: (Math.random() - .5) * 30, vy: -20 - Math.random() * 50,
-          life: 1 + Math.random() * .8, c: m.light,
-        });
-      }
-    } else {
-      spawn();
-    }
+    cur = null; chain = 0;
+    phase = { k: 'settle', t: 0 };
     updateStats();
   }
+  // Moves every floating cell down one step; returns whether anything moved.
+  function stepGravity() {
+    let moved = false;
+    for (let y = ROWS - 2; y >= 0; y--) for (let x = 0; x < COLS; x++) {
+      if (grid[y][x] && !grid[y + 1][x]) { grid[y + 1][x] = grid[y][x]; grid[y][x] = 0; moved = true; }
+    }
+    return moved;
+  }
+  function findGroups() {
+    const seen = grid.map((row) => row.map(() => false));
+    const groups = [];
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+      if (!grid[y][x] || seen[y][x]) continue;
+      const t = decT(grid[y][x]), cells = [], stack = [[x, y]];
+      seen[y][x] = true;
+      while (stack.length) {
+        const [cx, cy] = stack.pop();
+        cells.push([cx, cy]);
+        for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+          const nx = cx + dx, ny = cy + dy;
+          if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS || seen[ny][nx]) continue;
+          if (grid[ny][nx] && decT(grid[ny][nx]) === t) { seen[ny][nx] = true; stack.push([nx, ny]); }
+        }
+      }
+      if (cells.length >= 4) groups.push({ t, cells });
+    }
+    return groups;
+  }
+  function resolve() {
+    const groups = findGroups();
+    if (!groups.length) { phase = null; spawn(); return; }
+    chain++;
+    phase = { k: 'clear', t: 0, groups };
+    for (const g of groups) for (const [x, y] of g.cells) {
+      for (let k = 0; k < 4; k++) particles.push({
+        x: x * S + Math.random() * S, y: y * S + Math.random() * S,
+        vx: (Math.random() - .5) * 30, vy: -20 - Math.random() * 50,
+        life: 1 + Math.random() * .8, c: MOSS[g.t].light,
+      });
+    }
+  }
   function finishClear() {
-    const rows = clearing.rows;
-    const types = rows.map((y) => {
-      const cnt = new Array(MOSS.length).fill(0);
-      grid[y].forEach((cell) => cnt[cell.t]++);
-      return cnt.indexOf(Math.max(...cnt));
-    });
-    grid = grid.filter((_, i) => !rows.includes(i));
-    while (grid.length < ROWS) grid.unshift(Array(COLS).fill(null));
-    const n = rows.length;
-    lines += n;
-    score += [0, 100, 300, 500, 800][n] * level;
-    level = Math.floor(lines / 10) + 1;
-    clearing = null;
-    addToJar(types, n);
+    const groups = phase.groups;
+    let n = 0;
+    for (const g of groups) for (const [x, y] of g.cells) { grid[y][x] = 0; n++; }
+    score += n * 10 * Math.min(32, 2 ** (chain - 1)) * level;
+    rooted += n;
+    level = Math.floor(rooted / 40) + 1;
+    addToJar(groups, chain);
+    phase = { k: 'settle', t: 0 };
     updateStats();
-    spawn();
   }
 
   function gameOver() {
-    state = 'over'; cur = null;
+    state = 'over'; cur = null; phase = null;
     if (score > best) { best = score; store.set('kokerium.best', best); }
     updateStats();
-    showOverlay('おしまい', `スコア ${score} ／ ${lines} 段<br>瓶にはちゃんと残ってる。`, 'もういちど');
+    showOverlay('おしまい', `スコア ${score} ／ ${rooted} 株が根づいた<br>瓶にはちゃんと残ってる。`, 'もういちど');
   }
 
   function showOverlay(title, text, btn) {
@@ -424,7 +441,7 @@
 
   function updateStats() {
     $('score').textContent = score ?? 0;
-    $('lines').textContent = lines ?? 0;
+    $('lines').textContent = rooted ?? 0;
     $('level').textContent = level ?? 1;
     $('best').textContent = best;
   }
@@ -445,16 +462,16 @@
       return;
     }
     const a = KEYS[e.key];
-    if (!a || clearing) return;
-    if (a === 'drop' && e.repeat) return;
+    if (!a) return;
     e.preventDefault();
+    if (!cur || (a === 'drop' && e.repeat)) return;
     act[a]();
   });
   window.addEventListener('blur', () => { if (state === 'playing') togglePause(); });
   document.querySelectorAll('#touch button').forEach((b) => {
     b.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      if (state === 'playing' && !clearing) act[b.dataset.a]();
+      if (state === 'playing' && cur) act[b.dataset.a]();
     });
   });
 
@@ -465,24 +482,26 @@
     bg.addColorStop(0, '#16261c'); bg.addColorStop(.75, '#122018'); bg.addColorStop(1, '#2a1f17');
     g.fillStyle = bg; g.fillRect(0, 0, W, H);
 
-    g.strokeStyle = 'rgba(160,220,180,.045)'; g.lineWidth = 1;
-    for (let x = 1; x < COLS; x++) { g.beginPath(); g.moveTo(x * S + .5, 0); g.lineTo(x * S + .5, H); g.stroke(); }
-    for (let y = 1; y < ROWS; y++) { g.beginPath(); g.moveTo(0, y * S + .5); g.lineTo(W, y * S + .5); g.stroke(); }
-
     for (const m of motes) {
       g.fillStyle = `rgba(220,255,230,${.08 + .07 * Math.sin(time / 900 + m.p)})`;
       g.beginPath(); g.arc(m.x + Math.sin(time / 1500 + m.p) * 6, m.y, m.r, 0, 7); g.fill();
     }
 
     for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-      const cell = grid && grid[y][x];
-      if (cell) g.drawImage(sprite(cell.t, cell.v), x * S, y * S, S, S);
+      const c = grid && grid[y][x];
+      if (c) g.drawImage(sprite(decT(c), decV(c)), x * S, y * S, S, S);
     }
 
-    if (clearing) {
-      const k = clearing.t / 380;
-      g.fillStyle = `rgba(235,255,220,${.55 * Math.sin(k * Math.PI)})`;
-      for (const y of clearing.rows) g.fillRect(0, y * S, W, S);
+    if (phase && phase.k === 'clear') {
+      const k = phase.t / 420;
+      g.fillStyle = `rgba(235,255,220,${.6 * Math.sin(k * Math.PI)})`;
+      for (const gr of phase.groups) for (const [x, y] of gr.cells) { rr(g, x * S + 1, y * S + 1, S - 2, S - 2, 7); g.fill(); }
+      if (chain >= 2) {
+        g.fillStyle = `rgba(240,255,210,${Math.sin(k * Math.PI)})`;
+        g.font = 'bold 22px "Hiragino Maru Gothic ProN", system-ui, sans-serif';
+        g.textAlign = 'center';
+        g.fillText(`${chain} れんさ`, W / 2, H * .3 - k * 20);
+      }
     }
 
     if (cur && state !== 'over') {
@@ -492,7 +511,7 @@
       g.setLineDash([3, 3]);
       eachCell(cur, (x, y) => { if (gy + y >= 0) { rr(g, (cur.x + x) * S + 3, (gy + y) * S + 3, S - 6, S - 6, 6); g.stroke(); } });
       g.setLineDash([]);
-      eachCell(cur, (x, y, v) => { if (cur.y + y >= 0) g.drawImage(sprite(cur.t, v), (cur.x + x) * S, (cur.y + y) * S, S, S); });
+      eachCell(cur, (x, y, c) => { if (cur.y + y >= 0) g.drawImage(sprite(decT(c), decV(c)), (cur.x + x) * S, (cur.y + y) * S, S, S); });
     }
 
     for (const p of particles) {
@@ -515,9 +534,9 @@
     if (!next) return;
     let minX = 9, maxX = -1, minY = 9, maxY = -1;
     eachCell(next, (x, y) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); });
-    const s = 18, w = (maxX - minX + 1) * s, h = (maxY - minY + 1) * s;
+    const s = 22, w = (maxX - minX + 1) * s, h = (maxY - minY + 1) * s;
     const ox = (84 - w) / 2, oy = (84 - h) / 2;
-    eachCell(next, (x, y, v) => g.drawImage(sprite(next.t, v), ox + (x - minX) * s, oy + (y - minY) * s, s, s));
+    eachCell(next, (x, y, c) => g.drawImage(sprite(decT(c), decV(c)), ox + (x - minX) * s, oy + (y - minY) * s, s, s));
   }
 
   // ---- Jar (persistent kokerium) ----
@@ -534,30 +553,33 @@
   if (!Array.isArray(jarItems)) jarItems = [];
   let logLines = [];
 
-  function addToJar(types, n) {
+  function addToJar(groups, ch) {
     const added = [];
     const put = (item, name) => {
       jarItems.push({ ...item, x: 34 + Math.random() * 148, z: Math.random(), seed: (Math.random() * 1e9) | 0 });
       added.push(name);
     };
-    for (const t of types) {
-      if (Math.random() < .6) put({ k: 'mound', t }, MOSS[t].name);
-      else { const d = DECOS[(Math.random() * DECOS.length) | 0]; put({ k: d.k }, d.n); }
+    const deco = () => { const d = DECOS[(Math.random() * DECOS.length) | 0]; put({ k: d.k }, d.n); };
+    for (const g of groups) {
+      put({ k: 'mound', t: g.t }, MOSS[g.t].name);
+      if (g.cells.length >= 6) deco();
     }
-    if (n === 4) { const d = RARES[(Math.random() * RARES.length) | 0]; put({ k: d.k, rare: 1 }, `★${d.n}`); }
+    if (ch >= 2) deco();
+    if (ch >= 3) { const d = RARES[(Math.random() * RARES.length) | 0]; put({ k: d.k, rare: 1 }, `★${d.n}`); }
     while (jarItems.length > JAR_MAX) {
       const i = jarItems.findIndex((it) => !it.rare);
       jarItems.splice(i < 0 ? 0 : i, 1);
     }
     store.set('kokerium.jar.v1', jarItems);
-    logLines = [added.map((a) => `+ ${a}`).join('　'), ...logLines].slice(0, 4);
+    const head = ch >= 2 ? `${ch}れんさ　` : '';
+    logLines = [head + added.map((a) => `+ ${a}`).join('　'), ...logLines].slice(0, 4);
     renderLog();
     renderJar();
   }
   function renderLog() {
     $('log').innerHTML = logLines.length
       ? logLines.map((l, i) => `<div class="${i === 0 ? 'new' : ''}">${l}</div>`).join('')
-      : '段をそろえると、ここに増えていく。';
+      : '苔を根づかせると、ここに増えていく。';
     $('jarcount').textContent = jarItems.length;
   }
   // Two-step confirm (dialogs are unavailable in the artifact viewer)
@@ -781,11 +803,12 @@
     particles = particles.filter((p) => p.life > 0);
 
     if (state === 'playing') {
-      if (clearing) {
-        clearing.t += dt;
-        if (clearing.t >= 380) finishClear();
+      if (phase) {
+        phase.t += dt;
+        if (phase.k === 'settle' && phase.t >= 55) { phase.t = 0; if (!stepGravity()) resolve(); }
+        else if (phase.k === 'clear' && phase.t >= 420) finishClear();
       } else if (cur) {
-        const interval = Math.max(90, 800 * Math.pow(.85, level - 1));
+        const interval = Math.max(120, 850 * Math.pow(.88, level - 1));
         dropAcc += dt;
         if (dropAcc >= interval) { dropAcc = 0; move(0, 1); }
         if (cur && collide(cur.m, cur.x, cur.y + 1)) {
