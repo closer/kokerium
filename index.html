@@ -30,7 +30,7 @@
   .board-wrap { position: relative; }
   #board {
     display: block;
-    height: min(560px, 78vh); width: auto; aspect-ratio: 1 / 2;
+    height: min(560px, 80vh); width: auto; aspect-ratio: 256 / 534; max-width: 100%;
     border-radius: 14px;
     border: 2px solid var(--line);
     box-shadow: 0 0 0 6px #0c140f, 0 20px 50px rgba(0,0,0,.5);
@@ -59,9 +59,16 @@
   .stats dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
   .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
   #next { width: 84px; height: 84px; display: block; }
-  #jar { width: 216px; height: 256px; display: block; margin: 0 auto; }
-  #log { font-size: 12px; color: var(--muted); min-height: 72px; line-height: 1.6; }
-  #log .new { color: var(--text); }
+  .nextname { font-size: 11px; color: var(--muted); text-align: center; margin-top: 4px; min-height: 1.4em; }
+  .actions { display: flex; gap: 8px; }
+  .actions button { flex: 1; font-size: 13px; padding: 8px 10px; }
+  .side button:disabled { opacity: .4; cursor: default; }
+  #album { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  #album figure { margin: 0; text-align: center; }
+  #album img, #album .noimg { width: 100%; aspect-ratio: 256 / 534; display: block; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); }
+  #album figcaption { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #album .empty { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--muted); }
+  #overlay b { color: var(--text); font-size: 22px; }
   .help { font-size: 11px; color: var(--muted); line-height: 1.7; }
   .jar-head { display: flex; justify-content: space-between; align-items: center; }
   .jar-head button { padding: 2px 10px; font-size: 11px; }
@@ -73,7 +80,7 @@
   @media (hover: none) { #touch { display: flex; } }
   @media (max-width: 560px) {
     .side { width: 100%; max-width: 340px; }
-    #board { height: min(520px, 62vh); }
+    #board { height: min(520px, 60vh); }
   }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>
@@ -83,16 +90,16 @@
       <canvas id="board"></canvas>
       <div id="overlay">
         <h2 id="ov-title">こけりうむ</h2>
-        <p id="ov-text">同じ苔を4つ以上つなげると、根づいて瓶に植わる。<br>上の苔が落ちて、またつながることも。</p>
+        <p id="ov-text">苔を瓶に植えていく。<br>隙間は苔が育って埋めてくれる。<br>瓶の縁まで届いたら完成。</p>
         <button id="ov-btn">はじめる</button>
       </div>
     </div>
     <div id="touch">
-      <button data-a="left">←</button>
-      <button data-a="rot">↻</button>
-      <button data-a="right">→</button>
-      <button data-a="down">↓</button>
-      <button data-a="drop">⤓</button>
+      <button data-a="left" aria-label="左へ">←</button>
+      <button data-a="rot" aria-label="回転">↻</button>
+      <button data-a="right" aria-label="右へ">→</button>
+      <button data-a="drop" aria-label="落とす">⤓</button>
+      <button data-a="mist" aria-label="霧吹き">💧</button>
     </div>
   </div>
 
@@ -102,26 +109,31 @@
       <div>
         <div class="label">つぎ</div>
         <canvas id="next"></canvas>
+        <div id="nextname" class="nextname"></div>
       </div>
       <dl class="stats">
-        <dt>スコア</dt><dd id="score">0</dd>
-        <dt>根づいた</dt><dd id="lines">0</dd>
-        <dt>レベル</dt><dd id="level">1</dd>
-        <dt>ベスト</dt><dd id="best">0</dd>
+        <dt>埋まり</dt><dd id="fill">0%</dd>
+        <dt>隙間</dt><dd id="holes">0</dd>
+        <dt>苔の種類</dt><dd id="kinds">0</dd>
+        <dt>見える小物</dt><dd id="decos">0</dd>
+        <dt>霧吹き</dt><dd id="mist">3</dd>
       </dl>
+    </div>
+    <div class="actions">
+      <button id="mistbtn">💧 霧吹き（C）</button>
+      <button id="lidbtn">ふたをする（F）</button>
     </div>
     <div class="card">
       <div class="jar-head">
-        <div class="label">わたしのコケリウム（<span id="jarcount">0</span>）</div>
-        <button id="newjar">新しい瓶</button>
+        <div class="label">アルバム（ベスト <span id="best">0</span>）</div>
+        <button id="clearalbum">消す</button>
       </div>
-      <canvas id="jar"></canvas>
-      <div id="log"></div>
+      <div id="album"></div>
     </div>
     <div class="help">
-      ← → 移動 ／ ↓ ゆっくり落とす ／ Space 一気に落とす<br>
-      ↑ / X 右回転 ／ Z 左回転 ／ P 一時停止<br>
-      同じ苔を4つ以上つなげると根づいて消え、瓶に植わる。連鎖すると小物、3連鎖で珍しいものも。瓶はブラウザに保存される。
+      ← → 移動 ／ ↓ ゆっくり ／ Space 落とす ／ ↑ X Z 回転<br>
+      C 霧吹き（近くの苔がぐっと育つ） ／ F ふたをして完成 ／ P 一時停止<br>
+      苔は同じ種類の方へ根を伸ばして、くぼみや隙間を埋めていく。小物は育たないので置き場所しだい。苔に埋もれた小物は見えなくなる。
     </div>
   </div>
 </div>
@@ -131,6 +143,7 @@
   'use strict';
 
   const COLS = 8, ROWS = 16, S = 32;
+  const BOARD_H = ROWS * S + 22;
   const DPR = Math.min(window.devicePixelRatio || 1, 2);
   const $ = (id) => document.getElementById(id);
 
@@ -140,9 +153,8 @@
     g.setTransform(DPR, 0, 0, DPR, 0, 0);
     return g;
   }
-  const bctx = setupCanvas($('board'), COLS * S, ROWS * S);
+  const bctx = setupCanvas($('board'), COLS * S, BOARD_H);
   const nctx = setupCanvas($('next'), 84, 84);
-  const jctx = setupCanvas($('jar'), 216, 256);
 
   function rng(seed) {
     return function () {
@@ -274,332 +286,6 @@
     return c;
   }
 
-  // ---- Game state ----
-  // Pieces are 2-3 cells, each cell its own moss. Same moss connected 4+ takes root and clears.
-  // Cell code: 1 + t*8 + seed(0..7); 0 = empty.
-  const ACTIVE = [0, 2, 3, 4];
-  const SHAPES = [
-    [[1,1],[0,0]],
-    [[1,1],[0,0]],
-    [[0,0,0],[1,1,1],[0,0,0]],
-    [[1,0],[1,1]],
-  ];
-  const enc = (t) => 1 + t * 8 + ((Math.random() * 8) | 0);
-  const decT = (c) => (c - 1) >> 3;
-  const decV = (c) => ((c - 1) & 7) + 1;
-
-  let state = 'title';
-  let grid, cur, next, score, rooted, level, dropAcc, lockT, lockResets, phase, chain;
-  let best = store.get('kokerium.best', 0);
-  let particles = [];
-  const motes = Array.from({ length: 18 }, () => ({
-    x: Math.random() * COLS * S, y: Math.random() * ROWS * S,
-    v: 4 + Math.random() * 8, r: .6 + Math.random() * 1.4, p: Math.random() * 6,
-  }));
-
-  const rotCW = (m) => m[0].map((_, i) => m.map((row) => row[i]).reverse());
-  const rotCCW = (m) => m[0].map((_, i) => m.map((row) => row[row.length - 1 - i]));
-
-  function newPiece() {
-    const shape = SHAPES[(Math.random() * SHAPES.length) | 0];
-    const pick = () => ACTIVE[(Math.random() * ACTIVE.length) | 0];
-    return { m: shape.map((row) => row.map((c) => (c ? enc(pick()) : 0))), x: 0, y: 0 };
-  }
-  function collide(m, x, y) {
-    for (let r = 0; r < m.length; r++) for (let c = 0; c < m[r].length; c++) {
-      if (!m[r][c]) continue;
-      const nx = x + c, ny = y + r;
-      if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
-      if (ny >= 0 && grid[ny][nx]) return true;
-    }
-    return false;
-  }
-
-  function reset() {
-    grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
-    score = 0; rooted = 0; level = 1; phase = null; chain = 0; particles = [];
-    next = newPiece();
-    spawn();
-    updateStats();
-  }
-  function spawn() {
-    cur = next; next = newPiece();
-    cur.x = ((COLS - cur.m[0].length) / 2) | 0;
-    cur.y = -cur.m.findIndex((row) => row.some(Boolean));
-    dropAcc = 0; lockT = 0; lockResets = 0;
-    drawNext();
-    if (collide(cur.m, cur.x, cur.y)) gameOver();
-  }
-  function touchLock() { if (lockResets < 15) { lockT = 0; lockResets++; } }
-  function move(dx, dy) {
-    if (!cur || collide(cur.m, cur.x + dx, cur.y + dy)) return false;
-    cur.x += dx; cur.y += dy;
-    if (dx) touchLock();
-    return true;
-  }
-  function rotate(dir) {
-    if (!cur) return;
-    const m2 = dir > 0 ? rotCW(cur.m) : rotCCW(cur.m);
-    for (const [kx, ky] of [[0,0],[-1,0],[1,0],[0,-1]]) {
-      if (!collide(m2, cur.x + kx, cur.y + ky)) { cur.m = m2; cur.x += kx; cur.y += ky; touchLock(); return; }
-    }
-  }
-  function softDrop() { if (move(0, 1)) { score += 1; dropAcc = 0; updateStats(); } }
-  function hardDrop() {
-    if (!cur) return;
-    while (move(0, 1)) score += 2;
-    lock();
-  }
-  function lock() {
-    for (let r = 0; r < cur.m.length; r++) for (let c = 0; c < cur.m[r].length; c++) {
-      const v = cur.m[r][c];
-      if (!v) continue;
-      const ny = cur.y + r;
-      if (ny < 0) { gameOver(); return; }
-      grid[ny][cur.x + c] = v;
-    }
-    cur = null; chain = 0;
-    phase = { k: 'settle', t: 0 };
-    updateStats();
-  }
-  // Moves every floating cell down one step; returns whether anything moved.
-  function stepGravity() {
-    let moved = false;
-    for (let y = ROWS - 2; y >= 0; y--) for (let x = 0; x < COLS; x++) {
-      if (grid[y][x] && !grid[y + 1][x]) { grid[y + 1][x] = grid[y][x]; grid[y][x] = 0; moved = true; }
-    }
-    return moved;
-  }
-  function findGroups() {
-    const seen = grid.map((row) => row.map(() => false));
-    const groups = [];
-    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-      if (!grid[y][x] || seen[y][x]) continue;
-      const t = decT(grid[y][x]), cells = [], stack = [[x, y]];
-      seen[y][x] = true;
-      while (stack.length) {
-        const [cx, cy] = stack.pop();
-        cells.push([cx, cy]);
-        for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
-          const nx = cx + dx, ny = cy + dy;
-          if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS || seen[ny][nx]) continue;
-          if (grid[ny][nx] && decT(grid[ny][nx]) === t) { seen[ny][nx] = true; stack.push([nx, ny]); }
-        }
-      }
-      if (cells.length >= 4) groups.push({ t, cells });
-    }
-    return groups;
-  }
-  function resolve() {
-    const groups = findGroups();
-    if (!groups.length) { phase = null; spawn(); return; }
-    chain++;
-    phase = { k: 'clear', t: 0, groups };
-    for (const g of groups) for (const [x, y] of g.cells) {
-      for (let k = 0; k < 4; k++) particles.push({
-        x: x * S + Math.random() * S, y: y * S + Math.random() * S,
-        vx: (Math.random() - .5) * 30, vy: -20 - Math.random() * 50,
-        life: 1 + Math.random() * .8, c: MOSS[g.t].light,
-      });
-    }
-  }
-  function finishClear() {
-    const groups = phase.groups;
-    let n = 0;
-    for (const g of groups) for (const [x, y] of g.cells) { grid[y][x] = 0; n++; }
-    score += n * 10 * Math.min(32, 2 ** (chain - 1)) * level;
-    rooted += n;
-    level = Math.floor(rooted / 40) + 1;
-    addToJar(groups, chain);
-    phase = { k: 'settle', t: 0 };
-    updateStats();
-  }
-
-  function gameOver() {
-    state = 'over'; cur = null; phase = null;
-    if (score > best) { best = score; store.set('kokerium.best', best); }
-    updateStats();
-    showOverlay('おしまい', `スコア ${score} ／ ${rooted} 株が根づいた<br>瓶にはちゃんと残ってる。`, 'もういちど');
-  }
-
-  function showOverlay(title, text, btn) {
-    $('ov-title').textContent = title;
-    $('ov-text').innerHTML = text;
-    $('ov-btn').textContent = btn;
-    $('overlay').classList.remove('hidden');
-  }
-  function start() {
-    reset();
-    state = 'playing';
-    $('overlay').classList.add('hidden');
-  }
-  function togglePause() {
-    if (state === 'playing') { state = 'paused'; showOverlay('ひとやすみ', '霧吹きでもどうぞ。', 'つづける'); }
-    else if (state === 'paused') { state = 'playing'; $('overlay').classList.add('hidden'); }
-  }
-  $('ov-btn').addEventListener('click', () => (state === 'paused' ? togglePause() : start()));
-
-  function updateStats() {
-    $('score').textContent = score ?? 0;
-    $('lines').textContent = rooted ?? 0;
-    $('level').textContent = level ?? 1;
-    $('best').textContent = best;
-  }
-
-  // ---- Input ----
-  const act = {
-    left: () => move(-1, 0), right: () => move(1, 0), down: softDrop,
-    rot: () => rotate(1), rotl: () => rotate(-1), drop: hardDrop,
-  };
-  const KEYS = {
-    ArrowLeft: 'left', ArrowRight: 'right', ArrowDown: 'down', ArrowUp: 'rot',
-    x: 'rot', X: 'rot', z: 'rotl', Z: 'rotl', ' ': 'drop',
-  };
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { togglePause(); e.preventDefault(); return; }
-    if (state !== 'playing') {
-      if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { state === 'paused' ? togglePause() : start(); e.preventDefault(); }
-      return;
-    }
-    const a = KEYS[e.key];
-    if (!a) return;
-    e.preventDefault();
-    if (!cur || (a === 'drop' && e.repeat)) return;
-    act[a]();
-  });
-  window.addEventListener('blur', () => { if (state === 'playing') togglePause(); });
-  document.querySelectorAll('#touch button').forEach((b) => {
-    b.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      if (state === 'playing' && cur) act[b.dataset.a]();
-    });
-  });
-
-  // ---- Board rendering ----
-  function drawBoard(time) {
-    const g = bctx, W = COLS * S, H = ROWS * S;
-    const bg = g.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#16261c'); bg.addColorStop(.75, '#122018'); bg.addColorStop(1, '#2a1f17');
-    g.fillStyle = bg; g.fillRect(0, 0, W, H);
-
-    for (const m of motes) {
-      g.fillStyle = `rgba(220,255,230,${.08 + .07 * Math.sin(time / 900 + m.p)})`;
-      g.beginPath(); g.arc(m.x + Math.sin(time / 1500 + m.p) * 6, m.y, m.r, 0, 7); g.fill();
-    }
-
-    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-      const c = grid && grid[y][x];
-      if (c) g.drawImage(sprite(decT(c), decV(c)), x * S, y * S, S, S);
-    }
-
-    if (phase && phase.k === 'clear') {
-      const k = phase.t / 420;
-      g.fillStyle = `rgba(235,255,220,${.6 * Math.sin(k * Math.PI)})`;
-      for (const gr of phase.groups) for (const [x, y] of gr.cells) { rr(g, x * S + 1, y * S + 1, S - 2, S - 2, 7); g.fill(); }
-      if (chain >= 2) {
-        g.fillStyle = `rgba(240,255,210,${Math.sin(k * Math.PI)})`;
-        g.font = 'bold 22px "Hiragino Maru Gothic ProN", system-ui, sans-serif';
-        g.textAlign = 'center';
-        g.fillText(`${chain} れんさ`, W / 2, H * .3 - k * 20);
-      }
-    }
-
-    if (cur && state !== 'over') {
-      let gy = cur.y;
-      while (!collide(cur.m, cur.x, gy + 1)) gy++;
-      g.strokeStyle = 'rgba(200,240,200,.3)'; g.lineWidth = 1.5;
-      g.setLineDash([3, 3]);
-      eachCell(cur, (x, y) => { if (gy + y >= 0) { rr(g, (cur.x + x) * S + 3, (gy + y) * S + 3, S - 6, S - 6, 6); g.stroke(); } });
-      g.setLineDash([]);
-      eachCell(cur, (x, y, c) => { if (cur.y + y >= 0) g.drawImage(sprite(decT(c), decV(c)), (cur.x + x) * S, (cur.y + y) * S, S, S); });
-    }
-
-    for (const p of particles) {
-      g.globalAlpha = Math.max(0, Math.min(1, p.life));
-      g.fillStyle = p.c;
-      g.beginPath(); g.arc(p.x, p.y, 1.8, 0, 7); g.fill();
-    }
-    g.globalAlpha = 1;
-
-    const v = g.createRadialGradient(W / 2, H / 2, H * .3, W / 2, H / 2, H * .75);
-    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.35)');
-    g.fillStyle = v; g.fillRect(0, 0, W, H);
-  }
-  function eachCell(p, fn) {
-    for (let r = 0; r < p.m.length; r++) for (let c = 0; c < p.m[r].length; c++) if (p.m[r][c]) fn(c, r, p.m[r][c]);
-  }
-  function drawNext() {
-    const g = nctx;
-    g.clearRect(0, 0, 84, 84);
-    if (!next) return;
-    let minX = 9, maxX = -1, minY = 9, maxY = -1;
-    eachCell(next, (x, y) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); });
-    const s = 22, w = (maxX - minX + 1) * s, h = (maxY - minY + 1) * s;
-    const ox = (84 - w) / 2, oy = (84 - h) / 2;
-    eachCell(next, (x, y, c) => g.drawImage(sprite(decT(c), decV(c)), ox + (x - minX) * s, oy + (y - minY) * s, s, s));
-  }
-
-  // ---- Jar (persistent kokerium) ----
-  const DECOS = [
-    { k: 'stone', n: '石' }, { k: 'fern', n: 'シダ' },
-    { k: 'mushroom', n: 'きのこ' }, { k: 'flower', n: '小花' },
-  ];
-  const RARES = [
-    { k: 'deer', n: '白い鹿' }, { k: 'torii', n: '鳥居' },
-    { k: 'house', n: '小さな家' }, { k: 'lantern', n: '石灯籠' },
-  ];
-  const JAR_MAX = 80;
-  let jarItems = store.get('kokerium.jar.v1', []);
-  if (!Array.isArray(jarItems)) jarItems = [];
-  let logLines = [];
-
-  function addToJar(groups, ch) {
-    const added = [];
-    const put = (item, name) => {
-      jarItems.push({ ...item, x: 34 + Math.random() * 148, z: Math.random(), seed: (Math.random() * 1e9) | 0 });
-      added.push(name);
-    };
-    const deco = () => { const d = DECOS[(Math.random() * DECOS.length) | 0]; put({ k: d.k }, d.n); };
-    for (const g of groups) {
-      put({ k: 'mound', t: g.t }, MOSS[g.t].name);
-      if (g.cells.length >= 6) deco();
-    }
-    if (ch >= 2) deco();
-    if (ch >= 3) { const d = RARES[(Math.random() * RARES.length) | 0]; put({ k: d.k, rare: 1 }, `★${d.n}`); }
-    while (jarItems.length > JAR_MAX) {
-      const i = jarItems.findIndex((it) => !it.rare);
-      jarItems.splice(i < 0 ? 0 : i, 1);
-    }
-    store.set('kokerium.jar.v1', jarItems);
-    const head = ch >= 2 ? `${ch}れんさ　` : '';
-    logLines = [head + added.map((a) => `+ ${a}`).join('　'), ...logLines].slice(0, 4);
-    renderLog();
-    renderJar();
-  }
-  function renderLog() {
-    $('log').innerHTML = logLines.length
-      ? logLines.map((l, i) => `<div class="${i === 0 ? 'new' : ''}">${l}</div>`).join('')
-      : '苔を根づかせると、ここに増えていく。';
-    $('jarcount').textContent = jarItems.length;
-  }
-  // Two-step confirm (dialogs are unavailable in the artifact viewer)
-  let armTimer = null;
-  $('newjar').addEventListener('click', (e) => {
-    const b = e.currentTarget;
-    if (jarItems.length && !armTimer) {
-      b.textContent = 'ほんとに？';
-      armTimer = setTimeout(() => { b.textContent = '新しい瓶'; armTimer = null; }, 2500);
-      return;
-    }
-    clearTimeout(armTimer); armTimer = null; b.textContent = '新しい瓶';
-    jarItems = []; logLines = [];
-    store.set('kokerium.jar.v1', jarItems);
-    renderLog(); renderJar();
-  });
-
-  const J = { x: 16, y: 40, w: 184, h: 200, r: 26 };
-  const groundY = (x) => 178 + Math.sin(x * .045) * 5;
-
   const DRAW = {
     mound(g, x, y, s, it) {
       const m = MOSS[it.t] || MOSS[0], r = rng(it.seed);
@@ -730,66 +416,393 @@
     },
   };
 
-  function renderJar() {
-    const g = jctx;
-    g.clearRect(0, 0, 216, 256);
+  // ---- Pieces & cells ----
+  // Cell: {k:'moss', t, v, born?} | {k:'deco', d, seed}
+  const ACTIVE = [0, 2, 3, 4];
+  const RIM = 2;            // rows above this are outside the jar
+  const FLOOR = 22;         // soil band height in px
+  const MOSS_SHAPES = [
+    [[1]],
+    [[1,1],[0,0]],
+    [[1,1],[0,0]],
+    [[0,0,0],[1,1,1],[0,0,0]],
+    [[1,0],[1,1]],
+    [[1,1],[1,1]],
+  ];
+  const DECOS = [
+    { d: 'stone', n: '石', w: 3 }, { d: 'fern', n: 'シダ', w: 3 },
+    { d: 'mushroom', n: 'きのこ', w: 3 }, { d: 'flower', n: '小花', w: 3 },
+    { d: 'deer', n: '白い鹿', w: 1 }, { d: 'torii', n: '鳥居', w: 1 },
+    { d: 'house', n: '小さな家', w: 1 }, { d: 'lantern', n: '石灯籠', w: 1 },
+  ];
+  const DECO_NAME = Object.fromEntries(DECOS.map((d) => [d.d, d.n]));
+  const pick = (a) => a[(Math.random() * a.length) | 0];
+  function pickDeco() {
+    let r = Math.random() * DECOS.reduce((s, d) => s + d.w, 0);
+    for (const d of DECOS) { if ((r -= d.w) < 0) return d.d; }
+    return 'stone';
+  }
+  const mossCell = (t) => ({ k: 'moss', t, v: 1 + ((Math.random() * 8) | 0) });
 
-    g.fillStyle = 'rgba(0,0,0,.35)';
-    g.beginPath(); g.ellipse(108, 246, 92, 7, 0, 0, 7); g.fill();
+  let state = 'title';
+  let grid, cur, next, sinceDeco, placed, mist, growAcc, dropAcc, lockT, lockResets, mistFx = -1e9;
+  let best = store.get('kokerium.best2', 0);
+  let album = store.get('kokerium.album.v1', []);
+  if (!Array.isArray(album)) album = [];
+  let particles = [];
+  const W = COLS * S, H = ROWS * S + FLOOR;
+  const motes = Array.from({ length: 16 }, () => ({
+    x: Math.random() * W, y: Math.random() * H, v: 4 + Math.random() * 8, r: .6 + Math.random() * 1.4, p: Math.random() * 6,
+  }));
 
-    g.save();
-    rr(g, J.x, J.y, J.w, J.h, J.r);
-    g.fillStyle = 'rgba(170,220,195,.07)'; g.fill();
-    g.clip();
-
-    // gravel
-    const gr = rng(7);
-    g.fillStyle = '#4d4944'; g.fillRect(J.x, 216, J.w, 30);
-    for (let i = 0; i < 160; i++) {
-      g.fillStyle = ['#7a756c', '#5e5a53', '#9a958b', '#3f3c38'][(gr() * 4) | 0];
-      g.beginPath(); g.ellipse(J.x + gr() * J.w, 217 + gr() * 24, 1.5 + gr() * 2, 1 + gr() * 1.4, 0, 0, 7); g.fill();
+  function newPiece() {
+    sinceDeco++;
+    if (sinceDeco >= 4 && Math.random() < .3) {
+      sinceDeco = 0;
+      return { m: [[{ k: 'deco', d: pickDeco(), seed: (Math.random() * 1e9) | 0 }]] };
     }
-    // soil top + front face
-    g.beginPath();
-    g.moveTo(J.x, 218);
-    for (let x = J.x; x <= J.x + J.w; x += 4) g.lineTo(x, groundY(x));
-    g.lineTo(J.x + J.w, 218); g.closePath();
-    const sg = g.createLinearGradient(0, 170, 0, 218);
-    sg.addColorStop(0, '#5c4231'); sg.addColorStop(1, '#3a2a1f');
-    g.fillStyle = sg; g.fill();
-    for (let i = 0; i < 70; i++) {
-      g.fillStyle = 'rgba(20,12,6,.35)';
-      const x = J.x + gr() * J.w;
-      g.fillRect(x, groundY(x) + 2 + gr() * 34, 1.5, 1.5);
+    const shape = pick(MOSS_SHAPES), t = pick(ACTIVE), mixed = Math.random() < .25;
+    return { m: shape.map((row) => row.map((c) => (c ? mossCell(mixed ? pick(ACTIVE) : t) : null))) };
+  }
+  const rotCW = (m) => m[0].map((_, i) => m.map((row) => row[i]).reverse());
+  const rotCCW = (m) => m[0].map((_, i) => m.map((row) => row[row.length - 1 - i]));
+  function eachCell(p, fn) {
+    for (let r = 0; r < p.m.length; r++) for (let c = 0; c < p.m[r].length; c++) if (p.m[r][c]) fn(c, r, p.m[r][c]);
+  }
+  function collide(m, x, y) {
+    for (let r = 0; r < m.length; r++) for (let c = 0; c < m[r].length; c++) {
+      if (!m[r][c]) continue;
+      const nx = x + c, ny = y + r;
+      if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
+      if (ny >= 0 && grid[ny][nx]) return true;
+    }
+    return false;
+  }
+
+  function reset() {
+    grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+    sinceDeco = 0; placed = 0; mist = 3; growAcc = 0; particles = [];
+    next = newPiece();
+    spawn();
+    updateStats();
+  }
+  function spawn() {
+    cur = next; next = newPiece();
+    cur.x = ((COLS - cur.m[0].length) / 2) | 0;
+    cur.y = -cur.m.findIndex((row) => row.some(Boolean));
+    dropAcc = 0; lockT = 0; lockResets = 0;
+    drawNext();
+    if (collide(cur.m, cur.x, cur.y)) finish('もう植える場所がない');
+  }
+  function touchLock() { if (lockResets < 15) { lockT = 0; lockResets++; } }
+  function move(dx, dy) {
+    if (!cur || collide(cur.m, cur.x + dx, cur.y + dy)) return false;
+    cur.x += dx; cur.y += dy;
+    if (dx) touchLock();
+    return true;
+  }
+  function rotate(dir) {
+    if (!cur) return;
+    const m2 = dir > 0 ? rotCW(cur.m) : rotCCW(cur.m);
+    for (const [kx, ky] of [[0,0],[-1,0],[1,0],[0,-1]]) {
+      if (!collide(m2, cur.x + kx, cur.y + ky)) { cur.m = m2; cur.x += kx; cur.y += ky; touchLock(); return; }
+    }
+  }
+  function softDrop() { if (move(0, 1)) dropAcc = 0; }
+  function hardDrop() { if (!cur) return; while (move(0, 1)); lock(); }
+  function lock() {
+    let overRim = false;
+    eachCell(cur, (x, y, cell) => {
+      const gy = cur.y + y;
+      if (gy < RIM) overRim = true;
+      if (gy >= 0) grid[gy][cur.x + x] = cell;
+    });
+    cur = null;
+    placed++;
+    if (placed % 10 === 0 && mist < 5) mist++;
+    updateStats();
+    if (overRim) finish('縁まで届いた');
+    else spawn();
+  }
+
+  // ---- Growth ----
+  const filled = (x, y) => y >= ROWS || (x >= 0 && x < COLS && y >= 0 && !!grid[y][x]);
+  function curCells() {
+    const set = new Set();
+    if (cur) eachCell(cur, (x, y) => set.add((cur.y + y) * COLS + cur.x + x));
+    return set;
+  }
+  // Moss spreads into empty cells that are cupped (2+ filled sides, floor counts, glass doesn't)
+  // and touch moss. This fills pockets, overhang gaps and steps, but never sprouts upward alone.
+  function growOnce(now) {
+    const busy = curCells();
+    const cands = [];
+    let total = 0;
+    for (let y = RIM; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+      if (grid[y][x] || busy.has(y * COLS + x)) continue;
+      let support = 0;
+      const moss = [];
+      for (const [dx, dy] of [[-1,0],[1,0],[0,1],[0,-1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || nx >= COLS) continue;
+        if (filled(nx, ny)) support++;
+        const c = ny < ROWS && ny >= 0 ? grid[ny][nx] : null;
+        if (c && c.k === 'moss') moss.push(c.t);
+      }
+      if (!filled(x, y + 1) && !filled(x, y - 1)) continue;
+      if (support < 2 || !moss.length) continue;
+      const w = moss.length * moss.length;
+      cands.push({ x, y, moss, w }); total += w;
+    }
+    if (!cands.length) return false;
+    let r = Math.random() * total, c = cands[0];
+    for (const k of cands) { if ((r -= k.w) < 0) { c = k; break; } }
+    grid[c.y][c.x] = { ...mossCell(pick(c.moss)), born: now };
+    for (let k = 0; k < 5; k++) particles.push({
+      x: c.x * S + S / 2, y: c.y * S + S / 2, vx: (Math.random() - .5) * 40, vy: -10 - Math.random() * 30,
+      life: .8 + Math.random() * .5, c: MOSS[grid[c.y][c.x].t].light,
+    });
+    return true;
+  }
+  function useMist() {
+    if (state !== 'playing' || mist <= 0) return;
+    const now = performance.now();
+    let n = 0;
+    for (let i = 0; i < 8; i++) if (growOnce(now + i * 60)) n++;
+    mist--; mistFx = now;
+    updateStats();
+  }
+
+  // ---- Evaluation ----
+  function evaluate() {
+    let fill = 0, holes = 0, decos = 0, shown = 0;
+    const kinds = new Set();
+    for (let y = RIM; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+      const c = grid[y][x];
+      if (!c) continue;
+      fill++;
+      if (c.k === 'moss') kinds.add(c.t);
+      else {
+        decos++;
+        const above = y > RIM ? grid[y - 1][x] : null;
+        if (!above || above.k !== 'moss') shown++;
+      }
+    }
+    for (let x = 0; x < COLS; x++) {
+      let roof = false;
+      for (let y = RIM; y < ROWS; y++) { if (grid[y][x]) roof = true; else if (roof) holes++; }
+    }
+    const pct = fill / (COLS * (ROWS - RIM));
+    const score = Math.max(0, Math.round(pct * 600 + kinds.size * 40 + shown * 50 - holes * 15));
+    return { pct, holes, kinds: kinds.size, decos, shown, score };
+  }
+  function rankOf(score) {
+    if (score >= 850) return '見事な瓶';
+    if (score >= 650) return 'よく育った瓶';
+    if (score >= 400) return '育ちざかりの瓶';
+    return 'はじまりの瓶';
+  }
+
+  function finish(reason) {
+    state = 'done'; cur = null;
+    const e = evaluate(), rank = rankOf(e.score);
+    drawBoard(performance.now());
+    let img = '';
+    try {
+      const c = document.createElement('canvas');
+      c.width = 72; c.height = Math.round(72 * H / W);
+      c.getContext('2d').drawImage($('board'), 0, 0, c.width, c.height);
+      img = c.toDataURL('image/jpeg', .8);
+    } catch { /* thumbnail is optional */ }
+    album.unshift({ img, score: e.score, rank, at: Date.now() });
+    album = album.slice(0, 12);
+    store.set('kokerium.album.v1', album);
+    if (e.score > best) { best = e.score; store.set('kokerium.best2', best); }
+    renderAlbum();
+    updateStats();
+    showOverlay(rank,
+      `${reason}。<br>埋まり ${Math.round(e.pct * 100)}% ／ 隙間 ${e.holes}<br>苔 ${e.kinds} 種 ／ 見える小物 ${e.shown}<br><b>${e.score}</b> 点`,
+      'もうひと瓶つくる');
+  }
+
+  function showOverlay(title, text, btn) {
+    $('ov-title').textContent = title;
+    $('ov-text').innerHTML = text;
+    $('ov-btn').textContent = btn;
+    $('overlay').classList.remove('hidden');
+  }
+  function start() {
+    reset();
+    state = 'playing';
+    $('overlay').classList.add('hidden');
+  }
+  function togglePause() {
+    if (state === 'playing') { state = 'paused'; showOverlay('ひとやすみ', '苔は待っててくれる。', 'つづける'); }
+    else if (state === 'paused') { state = 'playing'; $('overlay').classList.add('hidden'); }
+  }
+  $('ov-btn').addEventListener('click', () => (state === 'paused' ? togglePause() : start()));
+  $('mistbtn').addEventListener('click', useMist);
+  $('lidbtn').addEventListener('click', () => { if (state === 'playing') finish('ふたをした'); });
+
+  function updateStats() {
+    if (!grid) return;
+    const e = evaluate();
+    $('fill').textContent = `${Math.round(e.pct * 100)}%`;
+    $('holes').textContent = e.holes;
+    $('kinds').textContent = e.kinds;
+    $('decos').textContent = e.shown;
+    $('mist').textContent = '💧'.repeat(mist) || '—';
+    $('best').textContent = best;
+    $('mistbtn').disabled = state !== 'playing' || mist <= 0;
+  }
+  function renderAlbum() {
+    $('best').textContent = best;
+    $('album').innerHTML = album.length
+      ? album.map((a) => `<figure>${a.img ? `<img src="${a.img}" alt="${a.rank}">` : '<div class="noimg"></div>'}<figcaption>${a.score}</figcaption></figure>`).join('')
+      : '<p class="empty">完成した瓶がここに並ぶ。</p>';
+  }
+  let armTimer = null;
+  $('clearalbum').addEventListener('click', (e) => {
+    const b = e.currentTarget;
+    if (!album.length) return;
+    if (!armTimer) {
+      b.textContent = 'ほんとに？';
+      armTimer = setTimeout(() => { b.textContent = '消す'; armTimer = null; }, 2500);
+      return;
+    }
+    clearTimeout(armTimer); armTimer = null; b.textContent = '消す';
+    album = []; store.set('kokerium.album.v1', album); renderAlbum();
+  });
+
+  // ---- Input ----
+  const act = {
+    left: () => move(-1, 0), right: () => move(1, 0), down: softDrop,
+    rot: () => rotate(1), rotl: () => rotate(-1), drop: hardDrop, mist: useMist,
+  };
+  const KEYS = {
+    ArrowLeft: 'left', ArrowRight: 'right', ArrowDown: 'down', ArrowUp: 'rot',
+    x: 'rot', X: 'rot', z: 'rotl', Z: 'rotl', ' ': 'drop', c: 'mist', C: 'mist',
+  };
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { togglePause(); e.preventDefault(); return; }
+    if (state !== 'playing') {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { state === 'paused' ? togglePause() : start(); e.preventDefault(); }
+      return;
+    }
+    if ((e.key === 'f' || e.key === 'F') && !e.repeat) { finish('ふたをした'); return; }
+    const a = KEYS[e.key];
+    if (!a) return;
+    e.preventDefault();
+    if (e.repeat && (a === 'drop' || a === 'mist')) return;
+    if (a !== 'mist' && !cur) return;
+    act[a]();
+  });
+  window.addEventListener('blur', () => { if (state === 'playing') togglePause(); });
+  document.querySelectorAll('#touch button').forEach((b) => {
+    b.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      if (state === 'playing') act[b.dataset.a]();
+    });
+  });
+
+  // ---- Rendering ----
+  function drawCell(g, cell, px, py, size, now) {
+    if (cell.k === 'moss') {
+      const k = cell.born ? Math.min(1, Math.max(0, (now - cell.born) / 350)) : 1;
+      if (k <= 0) return;
+      const sz = size * (.4 + .6 * k), o = (size - sz) / 2;
+      g.drawImage(sprite(cell.t, cell.v), px + o, py + o, sz, sz);
+    } else {
+      g.fillStyle = 'rgba(60,40,28,.55)';
+      rr(g, px + 2, py + size - 7, size - 4, 6, 3); g.fill();
+      g.fillStyle = 'rgba(120,170,90,.35)';
+      rr(g, px + 4, py + size - 8, size - 8, 3, 1.5); g.fill();
+      const s = size / 32;
+      (DRAW[cell.d] || DRAW.stone)(g, px + size / 2, py + size - 4, s * .95, cell);
+      g.lineCap = 'butt';
+    }
+  }
+  function drawBoard(now) {
+    const g = bctx, GH = ROWS * S;
+    const bg = g.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#1a2c21'); bg.addColorStop(1, '#0f1b14');
+    g.fillStyle = bg; g.fillRect(0, 0, W, H);
+
+    // outside the jar (above the rim)
+    g.fillStyle = 'rgba(200,230,210,.05)'; g.fillRect(0, 0, W, RIM * S);
+    g.strokeStyle = 'rgba(210,250,230,.35)'; g.lineWidth = 1.5; g.setLineDash([5, 5]);
+    g.beginPath(); g.moveTo(0, RIM * S + .5); g.lineTo(W, RIM * S + .5); g.stroke(); g.setLineDash([]);
+    g.fillStyle = 'rgba(210,250,230,.4)'; g.font = '11px "Hiragino Maru Gothic ProN", system-ui, sans-serif';
+    g.textAlign = 'right'; g.fillText('瓶の縁', W - 6, RIM * S - 5);
+
+    for (const m of motes) {
+      g.fillStyle = `rgba(220,255,230,${.07 + .06 * Math.sin(now / 900 + m.p)})`;
+      g.beginPath(); g.arc(m.x + Math.sin(now / 1500 + m.p) * 6, m.y, m.r, 0, 7); g.fill();
     }
 
-    const items = [...jarItems].sort((a, b) => a.z - b.z);
-    for (const it of items) {
-      const y = groundY(it.x) + 3 + it.z * 30;
-      const s = .75 + it.z * .45;
-      (DRAW[it.k] || DRAW.stone)(g, it.x, y, s, it);
+    // soil floor
+    const sg = g.createLinearGradient(0, GH, 0, H);
+    sg.addColorStop(0, '#4a3426'); sg.addColorStop(.5, '#3a2a1f'); sg.addColorStop(1, '#55504a');
+    g.fillStyle = sg; g.fillRect(0, GH, W, FLOOR);
+    const fr = rng(11);
+    for (let i = 0; i < 60; i++) {
+      g.fillStyle = ['#6e685f', '#2b1f17', '#8a847a'][(fr() * 3) | 0];
+      g.fillRect(fr() * W, GH + 4 + fr() * (FLOOR - 6), 2, 2);
     }
 
-    // mist
-    const mist = g.createLinearGradient(0, J.y, 0, J.y + 90);
-    mist.addColorStop(0, 'rgba(230,255,240,.12)'); mist.addColorStop(1, 'rgba(230,255,240,0)');
-    g.fillStyle = mist; g.fillRect(J.x, J.y, J.w, 90);
-    g.restore();
+    if (grid) for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+      const c = grid[y][x];
+      if (c && c.k === 'moss') drawCell(g, c, x * S, y * S, S, now);
+    }
+    if (grid) for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+      const c = grid[y][x];
+      if (c && c.k === 'deco') drawCell(g, c, x * S, y * S, S, now);
+    }
+
+    if (cur && state === 'playing') {
+      let gy = cur.y;
+      while (!collide(cur.m, cur.x, gy + 1)) gy++;
+      g.strokeStyle = 'rgba(200,240,200,.3)'; g.lineWidth = 1.5; g.setLineDash([3, 3]);
+      eachCell(cur, (x, y) => { if (gy + y >= 0) { rr(g, (cur.x + x) * S + 3, (gy + y) * S + 3, S - 6, S - 6, 6); g.stroke(); } });
+      g.setLineDash([]);
+      eachCell(cur, (x, y, c) => { if (cur.y + y >= 0) drawCell(g, c, (cur.x + x) * S, (cur.y + y) * S, S, now); });
+    }
+
+    for (const p of particles) {
+      g.globalAlpha = Math.max(0, Math.min(1, p.life));
+      g.fillStyle = p.c;
+      g.beginPath(); g.arc(p.x, p.y, 1.6, 0, 7); g.fill();
+    }
+    g.globalAlpha = 1;
+
+    const mk = (now - mistFx) / 1400;
+    if (mk >= 0 && mk < 1) {
+      g.fillStyle = `rgba(235,250,255,${.35 * (1 - mk)})`;
+      g.fillRect(0, RIM * S, W, GH - RIM * S);
+    }
 
     // glass
-    rr(g, J.x, J.y, J.w, J.h, J.r);
-    g.strokeStyle = 'rgba(210,250,230,.45)'; g.lineWidth = 2; g.stroke();
-    g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 5; g.lineCap = 'round';
-    g.beginPath(); g.moveTo(J.x + 14, J.y + 34); g.lineTo(J.x + 14, J.y + 120); g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 5; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(10, RIM * S + 30); g.lineTo(10, GH - 60); g.stroke();
     g.lineWidth = 3;
-    g.beginPath(); g.moveTo(J.x + J.w - 14, J.y + 40); g.lineTo(J.x + J.w - 14, J.y + 62); g.stroke();
-    // lid
-    rr(g, 50, 30, 116, 8, 3); g.fillStyle = 'rgba(190,230,210,.25)'; g.fill();
-    rr(g, 58, 14, 100, 18, 5); g.fillStyle = '#a9835a'; g.fill();
-    g.strokeStyle = '#7a5b3c'; g.lineWidth = 1; g.stroke();
-    const cr = rng(3);
-    g.fillStyle = 'rgba(80,55,30,.4)';
-    for (let i = 0; i < 26; i++) g.fillRect(60 + cr() * 96, 16 + cr() * 14, 1.5, 1.5);
+    g.beginPath(); g.moveTo(W - 10, RIM * S + 40); g.lineTo(W - 10, RIM * S + 70); g.stroke();
+    g.lineCap = 'butt';
+    const v = g.createRadialGradient(W / 2, H / 2, H * .3, W / 2, H / 2, H * .75);
+    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.3)');
+    g.fillStyle = v; g.fillRect(0, 0, W, H);
+  }
+  function drawNext() {
+    const g = nctx;
+    g.clearRect(0, 0, 84, 84);
+    if (!next) return;
+    let minX = 9, maxX = -1, minY = 9, maxY = -1;
+    eachCell(next, (x, y) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); });
+    const s = next.m.length === 1 ? 40 : 24, w = (maxX - minX + 1) * s, h = (maxY - minY + 1) * s;
+    const ox = (84 - w) / 2, oy = (84 - h) / 2;
+    eachCell(next, (x, y, c) => drawCell(g, c, ox + (x - minX) * s, oy + (y - minY) * s, s, 0));
+    const first = next.m.flat().find(Boolean);
+    const kinds = new Set(next.m.flat().filter(Boolean).map((c) => c.t));
+    $('nextname').textContent = first.k === 'deco' ? DECO_NAME[first.d] : kinds.size > 1 ? 'まぜ苔' : MOSS[first.t].name;
   }
 
   // ---- Loop ----
@@ -797,20 +810,16 @@
   function frame(now) {
     const dt = Math.min(50, now - last); last = now;
     const sec = dt / 1000;
-
-    for (const m of motes) { m.y -= m.v * sec; if (m.y < -4) { m.y = ROWS * S + 4; m.x = Math.random() * COLS * S; } }
-    for (const p of particles) { p.x += p.vx * sec; p.y += p.vy * sec; p.vy -= 6 * sec; p.life -= sec * .8; }
+    for (const m of motes) { m.y -= m.v * sec; if (m.y < -4) { m.y = H + 4; m.x = Math.random() * W; } }
+    for (const p of particles) { p.x += p.vx * sec; p.y += p.vy * sec; p.vy += 20 * sec; p.life -= sec; }
     particles = particles.filter((p) => p.life > 0);
 
     if (state === 'playing') {
-      if (phase) {
-        phase.t += dt;
-        if (phase.k === 'settle' && phase.t >= 55) { phase.t = 0; if (!stepGravity()) resolve(); }
-        else if (phase.k === 'clear' && phase.t >= 420) finishClear();
-      } else if (cur) {
-        const interval = Math.max(120, 850 * Math.pow(.88, level - 1));
+      growAcc += dt;
+      if (growAcc >= 1700) { growAcc = 0; if (growOnce(now)) updateStats(); }
+      if (cur) {
         dropAcc += dt;
-        if (dropAcc >= interval) { dropAcc = 0; move(0, 1); }
+        if (dropAcc >= 850) { dropAcc = 0; move(0, 1); }
         if (cur && collide(cur.m, cur.x, cur.y + 1)) {
           lockT += dt;
           if (lockT > 500) lock();
@@ -823,9 +832,8 @@
     requestAnimationFrame(frame);
   }
 
-  updateStats();
-  renderLog();
-  renderJar();
+  renderAlbum();
+  drawBoard(performance.now());
   requestAnimationFrame(frame);
 })();
 </script>
