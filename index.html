@@ -82,6 +82,9 @@
     .side { width: 100%; max-width: 340px; }
     #board { height: min(520px, 60vh); }
   }
+  .modes { display: flex; gap: 6px; font-size: 13px; }
+  .modes a { color: var(--muted); text-decoration: none; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); }
+  .modes a[aria-current] { color: var(--text); background: #3a6646; border-color: transparent; }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>
 <div id="app">
@@ -105,6 +108,7 @@
 
   <div class="side">
     <h1>こけりうむ</h1>
+    <nav class="modes"><a href="./" aria-current="page">あつめる</a><a href="./garden.html">つくる</a></nav>
     <div class="card row">
       <div>
         <div class="label">つぎ</div>

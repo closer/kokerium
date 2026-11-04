@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>こけりうむ 箱庭</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: stage (vessel) on the left, tool shelf on the right; stacks on phones. */
+  :root {
+    --bg: #101a14;
+    --panel: #18261d;
+    --line: #2c4234;
+    --text: #dfeee2;
+    --muted: #8fae98;
+    --accent: #a3c94a;
+    --btn: #223a2a;
+    --btn-on: #3a6646;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: radial-gradient(ellipse at 50% 0%, #1d3326 0%, var(--bg) 70%);
+    color: var(--text);
+    font-family: "Hiragino Maru Gothic ProN", "Zen Maru Gothic", "Hiragino Sans", system-ui, sans-serif;
+    padding-block: 16px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    user-select: none; -webkit-user-select: none;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: .15em; color: var(--accent); }
+  nav { display: flex; gap: 6px; font-size: 13px; }
+  nav a { color: var(--muted); text-decoration: none; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); }
+  nav a[aria-current] { color: var(--text); background: var(--btn-on); border-color: transparent; }
+  main { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; justify-content: center; }
+  .stage-wrap { position: relative; flex: 0 1 380px; min-width: 0; }
+  #stage {
+    display: block; width: 100%; max-width: 380px; aspect-ratio: 380 / 440; height: auto;
+    border-radius: 16px; background: #0c140f;
+    box-shadow: 0 20px 50px rgba(0,0,0,.45); touch-action: none; cursor: crosshair;
+  }
+  .tools { flex: 1 1 300px; min-width: 0; max-width: 380px; display: flex; flex-direction: column; gap: 12px; }
+  .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; letter-spacing: .05em; }
+  .seg, .swatches, .objs, .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  button {
+    font: inherit; color: var(--text); background: var(--btn); border: 1px solid var(--line);
+    border-radius: 10px; cursor: pointer; padding: 6px 12px; font-size: 13px;
+  }
+  button:hover { border-color: #4b7a57; }
+  button[aria-pressed="true"] { background: var(--btn-on); border-color: var(--accent); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .swatches button { display: flex; align-items: center; gap: 6px; padding: 5px 10px 5px 6px; font-size: 12px; }
+  .swatches i { width: 18px; height: 18px; border-radius: 50%; display: block; box-shadow: inset 0 -3px 0 rgba(0,0,0,.25); }
+  .objs button { padding: 2px; width: 52px; height: 52px; display: grid; place-items: center; }
+  .objs canvas { width: 44px; height: 44px; display: block; pointer-events: none; }
+  .help, .note { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
+  .note { border-top: 1px solid var(--line); padding-top: 8px; }
+  #toast {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    background: rgba(10,18,13,.85); color: var(--text); font-size: 12px; padding: 6px 12px; border-radius: 999px;
+    opacity: 0; transition: opacity .3s; pointer-events: none; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>こけりうむ</h1>
+    <nav><a href="./">あつめる</a><a href="./garden.html" aria-current="page">つくる</a></nav>
+  </header>
+  <main>
+    <div class="stage-wrap">
+      <canvas id="stage"></canvas>
+      <div id="toast"></div>
+    </div>
+    <div class="tools">
+      <section><div class="label">うつわ</div><div class="seg" id="vessels"></div></section>
+      <section><div class="label">苔</div><div class="swatches" id="mosses"></div></section>
+      <section><div class="label">置物</div><div class="objs" id="objs"></div></section>
+      <section><div class="label">大きさ</div><div class="seg" id="sizes"></div></section>
+      <section class="actions">
+        <button id="mistBtn">💧 霧吹き</button>
+        <button id="undoBtn">↶ 戻す</button>
+        <button id="clearBtn">片づける</button>
+        <button id="saveBtn">画像を保存</button>
+      </section>
+      <p class="help">うつわの中をタップすると、選んだ苔や置物がそこに降ってくる。置物はドラッグで動かせて、いちばん上まで持っていくと片づく。Ctrl+Z で戻す。</p>
+      <p class="note">試作中：置物はいまは全部使える。そのうち「あつめる」で手に入れたものだけ使える形にする。</p>
+    </div>
+  </main>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const W = 380, H = 440;
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const $ = (id) => document.getElementById(id);
+  const stage = $('stage');
+  stage.width = W * DPR; stage.height = H * DPR;
+  const ctx = stage.getContext('2d');
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const layer = document.createElement('canvas');
+  layer.width = W * DPR; layer.height = H * DPR;
+  const lctx = layer.getContext('2d');
+  lctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+  function rng(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function rr(g, x, y, w, h, r) {
+    g.beginPath();
+    g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r);
+    g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r);
+    g.arcTo(x, y, x + w, y, r);
+    g.closePath();
+  }
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
+  };
+
+  const MOSS = [
+    { name: 'スナゴケ',         base: '#c2cf3a', dark: '#8a9520', light: '#e8f08a', style: 'star' },
+    { name: 'ハイゴケ',         base: '#5f9e3f', dark: '#3d6f27', light: '#8fc56a', style: 'creep' },
+    { name: 'タマゴケ',         base: '#5fc08a', dark: '#2f8a5c', light: '#a8e6c0', style: 'ball' },
+    { name: 'ヒノキゴケ',       base: '#2f6e3e', dark: '#1d4a29', light: '#5fa86c', style: 'tree' },
+    { name: 'ホソバオキナゴケ', base: '#a9c7a1', dark: '#7a9c74', light: '#e0efdb', style: 'cushion' },
+    { name: 'コツボゴケ',       base: '#6cc06f', dark: '#3f8c45', light: '#aee6aa', style: 'leaf' },
+    { name: 'シッポゴケ',       base: '#4f7f3a', dark: '#33572a', light: '#8bb86a', style: 'tail' },
+  ];
+
+  const DRAW = {
+    mound(g, x, y, s, it) {
+      const m = MOSS[it.t] || MOSS[0], r = rng(it.seed);
+      const w = (14 + r() * 8) * s, h = (8 + r() * 6) * s;
+      const grad = g.createLinearGradient(0, y - h, 0, y);
+      grad.addColorStop(0, m.light); grad.addColorStop(.5, m.base); grad.addColorStop(1, m.dark);
+      g.fillStyle = grad;
+      g.beginPath(); g.ellipse(x, y, w, h, 0, Math.PI, 0); g.closePath(); g.fill();
+      for (let i = 0; i < 16; i++) {
+        const a = Math.PI + r() * Math.PI, d = .5 + r() * .5;
+        g.fillStyle = r() < .6 ? m.light : m.dark;
+        g.globalAlpha = .5;
+        g.beginPath(); g.arc(x + Math.cos(a) * w * d, y + Math.sin(a) * h * d, (1 + r() * 1.5) * s, 0, 7); g.fill();
+      }
+      g.globalAlpha = 1;
+      if (m.style === 'ball') {
+        for (let i = 0; i < 3; i++) {
+          const px = x + (r() - .5) * w, py = y - h * .8;
+          g.strokeStyle = '#8a5a2b'; g.lineWidth = 1;
+          g.beginPath(); g.moveTo(px, py + 3 * s); g.lineTo(px, py - 4 * s); g.stroke();
+          g.fillStyle = '#d4ea86'; g.beginPath(); g.arc(px, py - 4 * s, 2 * s, 0, 7); g.fill();
+        }
+      } else if (m.style === 'tree') {
+        for (let i = 0; i < 3; i++) {
+          const px = x + (r() - .5) * w * 1.2, py = y - h * (.4 + r() * .4);
+          g.strokeStyle = m.light; g.lineWidth = 1;
+          for (let k = 0; k < 4; k++) {
+            const yy = py - 8 * s + k * 2.2 * s, ww = (1.5 + k * 1.2) * s;
+            g.beginPath(); g.moveTo(px - ww, yy + s); g.lineTo(px, yy); g.lineTo(px + ww, yy + s); g.stroke();
+          }
+        }
+      }
+    },
+    stone(g, x, y, s, it) {
+      const r = rng(it.seed), w = (8 + r() * 6) * s, h = (5 + r() * 4) * s;
+      const grad = g.createRadialGradient(x - w * .3, y - h * 1.2, 1, x, y - h * .5, w * 1.2);
+      grad.addColorStop(0, '#c9c6bd'); grad.addColorStop(1, '#5f5c55');
+      g.fillStyle = grad;
+      g.beginPath(); g.ellipse(x, y - h * .4, w, h, (r() - .5) * .3, 0, 7); g.fill();
+      g.fillStyle = 'rgba(120,170,80,.55)';
+      g.beginPath(); g.ellipse(x - w * .2, y - h * 1.1, w * .4, h * .25, 0, 0, 7); g.fill();
+    },
+    fern(g, x, y, s, it) {
+      const r = rng(it.seed);
+      g.strokeStyle = '#4e9a52'; g.lineCap = 'round';
+      const n = 4 + ((r() * 3) | 0);
+      for (let i = 0; i < n; i++) {
+        const a = -Math.PI / 2 + (i / (n - 1) - .5) * 2.2;
+        const L = (16 + r() * 8) * s;
+        const ex = x + Math.cos(a) * L, ey = y + Math.sin(a) * L;
+        const cx = x + Math.cos(a) * L * .5 + Math.cos(a) * 4 * s, cy = y + Math.sin(a) * L * .5 - 6 * s;
+        g.lineWidth = 1.2 * s;
+        g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(cx, cy, ex, ey); g.stroke();
+        g.lineWidth = 1;
+        for (let k = 2; k < 8; k++) {
+          const t = k / 8, px = (1 - t) * (1 - t) * x + 2 * (1 - t) * t * cx + t * t * ex;
+          const py = (1 - t) * (1 - t) * y + 2 * (1 - t) * t * cy + t * t * ey;
+          const lw = (1 - t) * 4 * s + s;
+          g.beginPath(); g.moveTo(px - lw, py - lw * .4); g.lineTo(px, py); g.lineTo(px + lw, py - lw * .4); g.stroke();
+        }
+      }
+    },
+    mushroom(g, x, y, s, it) {
+      const r = rng(it.seed);
+      const caps = ['#c0533a', '#d9a441', '#a86b3c', '#e6d7b8'];
+      const cap = caps[(r() * caps.length) | 0], h = (8 + r() * 6) * s, w = (5 + r() * 3) * s;
+      g.fillStyle = '#efe6d2';
+      g.fillRect(x - 1.4 * s, y - h, 2.8 * s, h);
+      g.fillStyle = cap;
+      g.beginPath(); g.ellipse(x, y - h, w, w * .7, 0, Math.PI, 0); g.closePath(); g.fill();
+      if (cap === '#c0533a') {
+        g.fillStyle = '#fff';
+        for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(x + (r() - .5) * w, y - h - r() * w * .4, .9 * s, 0, 7); g.fill(); }
+      }
+    },
+    flower(g, x, y, s, it) {
+      const r = rng(it.seed);
+      const cols = ['#f4c6d6', '#fff4c2', '#c9d8ff', '#ffffff'];
+      const c = cols[(r() * cols.length) | 0];
+      for (let i = 0; i < 3; i++) {
+        const ex = x + (r() - .5) * 10 * s, ey = y - (10 + r() * 10) * s;
+        g.strokeStyle = '#5c9a4a'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x, (y + ey) / 2, ex, ey); g.stroke();
+        g.fillStyle = c;
+        for (let k = 0; k < 5; k++) {
+          const a = k * 1.2566;
+          g.beginPath(); g.arc(ex + Math.cos(a) * 1.6 * s, ey + Math.sin(a) * 1.6 * s, 1.3 * s, 0, 7); g.fill();
+        }
+        g.fillStyle = '#f2b84b'; g.beginPath(); g.arc(ex, ey, .9 * s, 0, 7); g.fill();
+      }
+    },
+    deer(g, x, y, s) {
+      g.strokeStyle = '#f2efe6'; g.fillStyle = '#f2efe6'; g.lineWidth = 1.4 * s; g.lineCap = 'round';
+      const by = y - 10 * s;
+      for (const dx of [-5, -3, 3, 5]) { g.beginPath(); g.moveTo(x + dx * s, by); g.lineTo(x + dx * s, y); g.stroke(); }
+      g.beginPath(); g.ellipse(x, by, 7 * s, 3.6 * s, 0, 0, 7); g.fill();
+      g.beginPath(); g.moveTo(x + 5 * s, by - 1 * s); g.lineTo(x + 8 * s, by - 8 * s); g.stroke();
+      g.beginPath(); g.ellipse(x + 9.5 * s, by - 8.5 * s, 2.8 * s, 1.6 * s, .3, 0, 7); g.fill();
+      g.strokeStyle = '#a8865a'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(x + 8 * s, by - 10 * s); g.lineTo(x + 6 * s, by - 14 * s); g.lineTo(x + 4 * s, by - 15 * s);
+      g.moveTo(x + 6.6 * s, by - 12.5 * s); g.lineTo(x + 8.5 * s, by - 15 * s); g.stroke();
+    },
+    torii(g, x, y, s) {
+      g.lineCap = 'butt';
+      g.strokeStyle = '#c8442f'; g.lineWidth = 2.2 * s;
+      g.beginPath(); g.moveTo(x - 7 * s, y); g.lineTo(x - 6 * s, y - 20 * s); g.moveTo(x + 7 * s, y); g.lineTo(x + 6 * s, y - 20 * s); g.stroke();
+      g.lineWidth = 1.8 * s;
+      g.beginPath(); g.moveTo(x - 10 * s, y - 15 * s); g.lineTo(x + 10 * s, y - 15 * s); g.stroke();
+      g.strokeStyle = '#2b2622'; g.lineWidth = 2.4 * s;
+      g.beginPath(); g.moveTo(x - 13 * s, y - 22 * s); g.quadraticCurveTo(x, y - 20 * s, x + 13 * s, y - 22 * s); g.stroke();
+    },
+    house(g, x, y, s) {
+      g.fillStyle = '#8b6a48'; g.fillRect(x - 8 * s, y - 10 * s, 16 * s, 10 * s);
+      g.fillStyle = '#4e3626';
+      g.beginPath(); g.moveTo(x - 11 * s, y - 9 * s); g.lineTo(x, y - 19 * s); g.lineTo(x + 11 * s, y - 9 * s); g.closePath(); g.fill();
+      g.fillStyle = '#ffd27a'; g.fillRect(x + 2 * s, y - 7 * s, 3.5 * s, 3 * s);
+      g.fillStyle = '#3a281c'; g.fillRect(x - 5 * s, y - 6 * s, 3.5 * s, 6 * s);
+    },
+    lantern(g, x, y, s) {
+      g.fillStyle = '#8f8c84';
+      g.fillRect(x - 5 * s, y - 3 * s, 10 * s, 3 * s);
+      g.fillRect(x - 1.8 * s, y - 11 * s, 3.6 * s, 8 * s);
+      g.fillRect(x - 4.5 * s, y - 13 * s, 9 * s, 2 * s);
+      g.fillStyle = '#ffd27a'; g.fillRect(x - 3 * s, y - 18 * s, 6 * s, 5 * s);
+      g.fillStyle = '#8f8c84';
+      g.beginPath(); g.moveTo(x - 7 * s, y - 18 * s); g.lineTo(x, y - 23 * s); g.lineTo(x + 7 * s, y - 18 * s); g.closePath(); g.fill();
+      g.beginPath(); g.arc(x, y - 24 * s, 1.5 * s, 0, 7); g.fill();
+    },
+  };
+  const OBJS = [
+    { k: 'stone', n: '石', s: 2.4 }, { k: 'fern', n: 'シダ', s: 1.7 },
+    { k: 'mushroom', n: 'きのこ', s: 1.8 }, { k: 'flower', n: '小花', s: 1.7 },
+    { k: 'deer', n: '白い鹿', s: 1.7 }, { k: 'torii', n: '鳥居', s: 2.0 },
+    { k: 'house', n: '小さな家', s: 2.0 }, { k: 'lantern', n: '石灯籠', s: 1.9 },
+  ];
+  const OBJ = Object.fromEntries(OBJS.map((o) => [o.k, o]));
+  const SIZES = [{ n: '小', m: .7 }, { n: '中', m: 1 }, { n: '大', m: 1.4 }];
+
+  // ---- Vessels: bottom(x) = inner floor y (null outside), cap(x) = highest surface allowed ----
+  const BOWL = { cx: 190, cy: 262, r: 150, rim: 120 };
+  const VESSELS = {
+    jar: {
+      n: '瓶', glass: true, rim: 60,
+      bottom(x) {
+        if (x < 64 || x > 316) return null;
+        const r = 40, y0 = 400;
+        if (x < 102) return y0 - r + Math.sqrt(Math.max(0, r * r - (102 - x) ** 2));
+        if (x > 278) return y0 - r + Math.sqrt(Math.max(0, r * r - (x - 278) ** 2));
+        return y0;
+      },
+      cap: () => 80,
+      soil: (x) => 350,
+      path(g) { rr(g, 60, 56, 260, 348, 40); },
+      front(g) {
+        rr(g, 60, 56, 260, 348, 40);
+        g.strokeStyle = 'rgba(210,250,230,.5)'; g.lineWidth = 2; g.stroke();
+        g.fillStyle = 'rgba(210,250,230,.18)'; rr(g, 54, 50, 272, 10, 5); g.fill();
+        glassShine(g, 78, 110, 300);
+      },
+    },
+    bowl: {
+      n: '丸い鉢', glass: true, rim: BOWL.rim,
+      bottom(x) {
+        const d = x - BOWL.cx;
+        if (Math.abs(d) > BOWL.r - 6) return null;
+        return BOWL.cy + Math.sqrt(BOWL.r ** 2 - d * d) - 3;
+      },
+      cap(x) {
+        const d = x - BOWL.cx;
+        return Math.max(BOWL.rim + 14, BOWL.cy - Math.sqrt(Math.max(0, BOWL.r ** 2 - d * d)) + 8);
+      },
+      soil: (x) => 340,
+      path(g) {
+        const a = Math.asin((BOWL.rim - BOWL.cy) / BOWL.r);
+        g.beginPath(); g.arc(BOWL.cx, BOWL.cy, BOWL.r, a, Math.PI - a); g.closePath();
+      },
+      front(g) {
+        this.path(g);
+        g.strokeStyle = 'rgba(210,250,230,.5)'; g.lineWidth = 2; g.stroke();
+        const hw = Math.sqrt(BOWL.r ** 2 - (BOWL.rim - BOWL.cy) ** 2);
+        g.strokeStyle = 'rgba(210,250,230,.35)'; g.lineWidth = 2;
+        g.beginPath(); g.ellipse(BOWL.cx, BOWL.rim, hw, 7, 0, 0, Math.PI * 2); g.stroke();
+        g.strokeStyle = 'rgba(255,255,255,.16)'; g.lineWidth = 6; g.lineCap = 'round';
+        g.beginPath(); g.arc(BOWL.cx, BOWL.cy, BOWL.r - 16, Math.PI * 1.05, Math.PI * 1.3); g.stroke();
+        g.lineCap = 'butt';
+      },
+    },
+    dish: {
+      n: '平皿', glass: false, rim: 340,
+      bottom(x) { return x < 62 || x > 318 ? null : 362; },
+      cap: () => 130,
+      soil(x) { const u = (x - 190) / 128; return 352 - 34 * Math.max(0, 1 - u * u); },
+      path(g) { g.beginPath(); g.rect(0, 0, W, 372); },
+      front(g) {
+        g.fillStyle = 'rgba(0,0,0,.35)';
+        g.beginPath(); g.ellipse(190, 398, 150, 9, 0, 0, Math.PI * 2); g.fill();
+        const grad = g.createLinearGradient(0, 340, 0, 392);
+        grad.addColorStop(0, '#5a6f86'); grad.addColorStop(1, '#2e3b4c');
+        g.fillStyle = grad;
+        g.beginPath(); g.moveTo(44, 346); g.lineTo(336, 346); g.quadraticCurveTo(326, 390, 300, 392);
+        g.lineTo(80, 392); g.quadraticCurveTo(54, 390, 44, 346); g.closePath(); g.fill();
+        g.fillStyle = '#7a90a8';
+        g.beginPath(); g.ellipse(190, 346, 147, 6, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = 'rgba(255,255,255,.12)';
+        g.beginPath(); g.ellipse(120, 366, 40, 4, -.05, 0, Math.PI * 2); g.fill();
+      },
+    },
+  };
+  function glassShine(g, x, y1, y2) {
+    g.strokeStyle = 'rgba(255,255,255,.16)'; g.lineWidth = 6; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(x, y1); g.lineTo(x, y2); g.stroke();
+    g.lineWidth = 3;
+    g.beginPath(); g.moveTo(W - x, y1 + 20); g.lineTo(W - x, y1 + 60); g.stroke();
+    g.lineCap = 'butt';
+  }
+
+  // ---- State ----
+  let vesselKey = store.get('kokerium.garden.vessel', 'jar');
+  if (!VESSELS[vesselKey]) vesselKey = 'jar';
+  let gardens = store.get('kokerium.garden.v1', {});
+  if (typeof gardens !== 'object' || !gardens) gardens = {};
+  let tool = { kind: 'moss', t: 4 };
+  let sizeIdx = 1;
+  let V, soilTop, mossH, xmin, xmax;
+  let items = [];
+  let falling = [], particles = [], droplets = [];
+  let drag = null, hoverX = null, mistAt = -1e9;
+  const motes = Array.from({ length: 14 }, () => ({ x: Math.random() * W, y: Math.random() * H, v: 3 + Math.random() * 6, r: .6 + Math.random() * 1.2, p: Math.random() * 6 }));
+
+  function loadVessel(key) {
+    vesselKey = key; V = VESSELS[key];
+    soilTop = new Float32Array(W); mossH = new Float32Array(W);
+    xmin = W; xmax = 0;
+    for (let x = 0; x < W; x++) {
+      const b = V.bottom(x);
+      if (b == null) { soilTop[x] = NaN; continue; }
+      soilTop[x] = Math.min(b, V.soil(x));
+      xmin = Math.min(xmin, x); xmax = Math.max(xmax, x);
+    }
+    items = Array.isArray(gardens[key]) ? gardens[key] : [];
+    rebuildHeights();
+    falling = []; drag = null;
+    store.set('kokerium.garden.vessel', key);
+    renderLayer();
+    syncButtons();
+  }
+  function save() { gardens[vesselKey] = items; store.set('kokerium.garden.v1', gardens); }
+  function rebuildHeights() {
+    mossH.fill(0);
+    for (const it of items) if (it.type === 'moss') it.add.forEach((a, i) => { mossH[it.x1 + i] += a; });
+  }
+  function surface(x) {
+    x = Math.max(xmin, Math.min(xmax, Math.round(x)));
+    return soilTop[x] - mossH[x];
+  }
+  const inside = (x) => x >= xmin && x <= xmax;
+
+  // ---- Moss blobs ----
+  function makeBlob(t, x0, mult, seed) {
+    const R = 26 * mult, A = 13 * mult;
+    const x1 = Math.max(xmin, Math.round(x0 - R)), x2 = Math.min(xmax, Math.round(x0 + R));
+    const base = [], add = [];
+    const r = rng(seed);
+    const wob = [r(), r(), r()];
+    for (let x = x1; x <= x2; x++) {
+      const u = (x - x0) / R;
+      const f = Math.max(0, 1 - u * u) ** 1.4 * (.85 + .15 * Math.sin(u * 5 + wob[0] * 6));
+      const s = soilTop[x] - mossH[x];
+      let a = A * f;
+      const c = V.cap(x);
+      if (s - a < c) a = Math.max(0, s - c);
+      base.push(Math.round(s * 10) / 10); add.push(Math.round(a * 10) / 10);
+    }
+    return { type: 'moss', t, x1, base, add, seed };
+  }
+  function drawBlob(g, b) {
+    const m = MOSS[b.t], r = rng(b.seed), n = b.add.length;
+    let minTop = 1e9, maxBase = 0, sum = 0;
+    for (let i = 0; i < n; i++) { minTop = Math.min(minTop, b.base[i] - b.add[i]); maxBase = Math.max(maxBase, b.base[i]); sum += b.add[i]; }
+    if (sum < 1) return;
+    g.beginPath();
+    for (let i = 0; i < n; i++) { const x = b.x1 + i, y = b.base[i] - b.add[i]; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+    for (let i = n - 1; i >= 0; i--) g.lineTo(b.x1 + i, b.base[i] + 1);
+    g.closePath();
+    const grad = g.createLinearGradient(0, minTop, 0, maxBase);
+    grad.addColorStop(0, m.base); grad.addColorStop(1, m.dark);
+    g.fillStyle = grad; g.fill();
+    // inner texture
+    const count = sum / 5;
+    for (let k = 0; k < count; k++) {
+      const i = (r() * n) | 0;
+      if (b.add[i] < 1.5) continue;
+      g.fillStyle = [m.dark, m.base, m.light][(r() * 3) | 0];
+      g.globalAlpha = .35 + r() * .35;
+      g.beginPath(); g.arc(b.x1 + i, b.base[i] - r() * b.add[i] * .9, 1.2 + r() * 2.4, 0, 7); g.fill();
+    }
+    g.globalAlpha = 1;
+    // fluffy rim
+    for (let i = 0; i < n; i += 2) {
+      if (b.add[i] < .8) continue;
+      const top = b.base[i] - b.add[i];
+      const rad = Math.min(4.5, 1.5 + b.add[i] * .35) * (.7 + r() * .5);
+      g.fillStyle = r() < .55 ? m.light : m.base;
+      g.globalAlpha = .85;
+      g.beginPath(); g.arc(b.x1 + i + (r() - .5) * 2, top + rad * .6, rad, 0, 7); g.fill();
+    }
+    g.globalAlpha = 1;
+    // species accents
+    g.lineCap = 'round';
+    for (let i = 3; i < n - 3; i += 5) {
+      if (b.add[i] < 3 || r() < .35) continue;
+      const x = b.x1 + i, y = b.base[i] - b.add[i] + 1;
+      accent(g, m, r, x, y);
+    }
+    g.lineCap = 'butt';
+  }
+  function accent(g, m, r, x, y) {
+    switch (m.style) {
+      case 'ball':
+        g.strokeStyle = '#8a5a2b'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + (r() - .5) * 3, y - 7 - r() * 5); g.stroke();
+        g.fillStyle = '#d4ea86'; g.strokeStyle = '#5b7a2a';
+        g.beginPath(); g.arc(x + (r() - .5) * 3, y - 9 - r() * 4, 2.4, 0, 7); g.fill(); g.stroke();
+        break;
+      case 'tree': {
+        const h = 8 + r() * 6;
+        g.strokeStyle = m.dark; g.lineWidth = 1.2;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x, y - h); g.stroke();
+        g.strokeStyle = m.light; g.lineWidth = 1;
+        for (let k = 0; k < 4; k++) { const yy = y - h + k * 2.4, w = 1.5 + k * 1.3; g.beginPath(); g.moveTo(x - w, yy + 1.5); g.lineTo(x, yy); g.lineTo(x + w, yy + 1.5); g.stroke(); }
+        break;
+      }
+      case 'star':
+        g.strokeStyle = m.light; g.lineWidth = 1;
+        for (let k = 0; k < 5; k++) { const a = k * 1.2566; g.beginPath(); g.moveTo(x, y - 2); g.lineTo(x + Math.cos(a) * 3.5, y - 2 + Math.sin(a) * 3.5); g.stroke(); }
+        break;
+      case 'cushion':
+        g.fillStyle = m.light; g.globalAlpha = .6;
+        g.beginPath(); g.arc(x, y + 1, 4 + r() * 3, Math.PI, 0); g.fill(); g.globalAlpha = 1;
+        break;
+      case 'leaf':
+        g.fillStyle = m.light;
+        for (let k = 0; k < 3; k++) { g.beginPath(); g.ellipse(x + (k - 1) * 3, y - 2 - r() * 3, 2.4, 1.1, (k - 1) * .6, 0, 7); g.fill(); }
+        break;
+      case 'tail':
+        g.strokeStyle = m.light; g.lineWidth = 1.3;
+        g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 4, y - 7, x + 1 + r() * 4, y - 11); g.stroke();
+        break;
+      default:
+        g.strokeStyle = m.light; g.lineWidth = 1.2;
+        g.beginPath(); g.moveTo(x - 3, y); g.quadraticCurveTo(x, y - 3, x + 4, y - 1); g.stroke();
+    }
+  }
+  function drawMossBall(g, t, x, y, rad, seed) {
+    const m = MOSS[t], r = rng(seed);
+    for (let k = 0; k < 22; k++) {
+      const a = r() * 6.283, d = r() * rad * .8;
+      g.fillStyle = [m.dark, m.base, m.light][(r() * 3) | 0];
+      g.beginPath(); g.arc(x + Math.cos(a) * d, y + Math.sin(a) * d * .8, rad * (.25 + r() * .25), 0, 7); g.fill();
+    }
+  }
+
+  // ---- Objects ----
+  function drawObj(g, o, alpha = 1) {
+    g.save();
+    g.globalAlpha = alpha;
+    g.fillStyle = 'rgba(0,0,0,.25)';
+    g.beginPath(); g.ellipse(o.x, o.y, 9 * o.s, 2.4 * o.s, 0, 0, 7); g.fill();
+    g.translate(o.x, o.y);
+    if (o.flip) g.scale(-1, 1);
+    (DRAW[o.k] || DRAW.stone)(g, 0, 0, o.s, o);
+    g.restore();
+    g.lineCap = 'butt';
+  }
+  function hitObj(x, y) {
+    for (let i = items.length - 1; i >= 0; i--) {
+      const o = items[i];
+      if (o.type !== 'obj') continue;
+      const w = 13 * o.s, h = 24 * o.s;
+      if (x > o.x - w && x < o.x + w && y > o.y - h && y < o.y + 4) return i;
+    }
+    return -1;
+  }
+
+  // ---- Layer render (static contents) ----
+  function renderLayer() {
+    const g = lctx;
+    g.clearRect(0, 0, W, H);
+    const bg = g.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#1a2c21'); bg.addColorStop(1, '#0e1812');
+    g.fillStyle = bg; g.fillRect(0, 0, W, H);
+
+    if (V.glass) {
+      g.fillStyle = 'rgba(0,0,0,.3)';
+      g.beginPath(); g.ellipse(190, V === VESSELS.bowl ? 414 : 410, 140, 9, 0, 0, 7); g.fill();
+      V.path(g); g.fillStyle = 'rgba(170,220,195,.07)'; g.fill();
+    }
+    g.save();
+    V.path(g); g.clip();
+
+    // soil & gravel
+    const gr = rng(7);
+    g.beginPath();
+    let first = true;
+    for (let x = xmin; x <= xmax; x++) { first ? g.moveTo(x, soilTop[x]) : g.lineTo(x, soilTop[x]); first = false; }
+    for (let x = xmax; x >= xmin; x--) g.lineTo(x, V.bottom(x) + 2);
+    g.closePath();
+    const sg = g.createLinearGradient(0, 300, 0, 420);
+    sg.addColorStop(0, '#5c4231'); sg.addColorStop(1, '#3a2a1f');
+    g.fillStyle = sg; g.fill();
+    if (V.glass) {
+      for (let x = xmin; x <= xmax; x += 2) {
+        const b = V.bottom(x);
+        for (let k = 0; k < 3; k++) {
+          g.fillStyle = ['#7a756c', '#5e5a53', '#9a958b', '#3f3c38'][(gr() * 4) | 0];
+          g.beginPath(); g.ellipse(x, b - 2 - gr() * 18, 1.5 + gr() * 2, 1 + gr() * 1.4, 0, 0, 7); g.fill();
+        }
+      }
+      for (let i = 0; i < 90; i++) {
+        const x = xmin + gr() * (xmax - xmin);
+        g.fillStyle = 'rgba(20,12,6,.35)';
+        g.fillRect(x, soilTop[Math.round(x)] + 3 + gr() * 20, 1.5, 1.5);
+      }
+    }
+
+    for (let i = 0; i < items.length; i++) {
+      if (drag && drag.idx === i) continue;
+      const it = items[i];
+      if (it.type === 'moss') drawBlob(g, it); else drawObj(g, it);
+    }
+    g.restore();
+    V.front(g);
+  }
+
+  // ---- Interaction ----
+  function toLocal(e) {
+    const r = stage.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height };
+  }
+  function drop(x) {
+    if (!inside(x)) return;
+    const mult = SIZES[sizeIdx].m;
+    const seed = (Math.random() * 1e9) | 0;
+    if (tool.kind === 'moss') falling.push({ kind: 'moss', t: tool.t, x, y: -20, vy: 0, mult, seed, rad: 11 * mult });
+    else falling.push({ kind: 'obj', k: tool.k, x, y: -30, vy: 0, s: OBJ[tool.k].s * mult, flip: Math.random() < .5, seed });
+  }
+  stage.addEventListener('pointerdown', (e) => {
+    const p = toLocal(e);
+    const i = hitObj(p.x, p.y);
+    if (i >= 0) {
+      drag = { idx: i, o: items[i], dx: items[i].x - p.x, remove: false };
+      stage.setPointerCapture(e.pointerId);
+      renderLayer();
+      return;
+    }
+    drop(p.x);
+  });
+  stage.addEventListener('pointermove', (e) => {
+    const p = toLocal(e);
+    hoverX = e.pointerType === 'mouse' ? p.x : null;
+    if (!drag) return;
+    const x = Math.max(xmin + 4, Math.min(xmax - 4, p.x + drag.dx));
+    drag.remove = p.y < 34;
+    drag.o.x = x;
+    drag.o.y = surface(x) + 2 * drag.o.s;
+  });
+  stage.addEventListener('pointerleave', () => { hoverX = null; });
+  const endDrag = () => {
+    if (!drag) return;
+    const { idx, o, remove } = drag;
+    items.splice(idx, 1);
+    if (remove) { puff(o.x, o.y - 10, '#e8e2d0'); toast(`${OBJ[o.k]?.n ?? '置物'}を片づけた`); }
+    else items.push(o);
+    drag = null;
+    save(); renderLayer();
+  };
+  stage.addEventListener('pointerup', endDrag);
+  stage.addEventListener('pointercancel', endDrag);
+
+  function puff(x, y, c, n = 10) {
+    for (let k = 0; k < n; k++) particles.push({ x, y, vx: (Math.random() - .5) * 70, vy: -10 - Math.random() * 50, life: .6 + Math.random() * .5, c });
+  }
+  function land(f) {
+    if (f.kind === 'moss') {
+      items.push(makeBlob(f.t, f.x, f.mult, f.seed));
+      rebuildHeights();
+      puff(f.x, surface(f.x), MOSS[f.t].light, 12);
+    } else {
+      const x = Math.max(xmin + 4, Math.min(xmax - 4, f.x));
+      items.push({ type: 'obj', k: f.k, x, y: surface(x) + 2 * f.s, s: f.s, flip: f.flip, seed: f.seed });
+      puff(x, surface(x), '#c9b79a', 6);
+    }
+    save(); renderLayer();
+  }
+  function undo() {
+    if (!items.length) return;
+    items.pop(); rebuildHeights(); save(); renderLayer();
+  }
+  function mist() {
+    mistAt = performance.now();
+    droplets = Array.from({ length: 46 }, () => ({ x: 40 + Math.random() * 300, y: 70 + Math.random() * 300, r: .8 + Math.random() * 1.8 }));
+    for (let x = xmin; x <= xmax; x += 14) if (mossH[x] > 2) puff(x, surface(x), 'rgba(230,255,240,.9)', 1);
+  }
+  let toastTimer;
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1600);
+  }
+
+  // ---- Tool shelf ----
+  function syncButtons() {
+    document.querySelectorAll('[data-vessel]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.vessel === vesselKey)));
+    document.querySelectorAll('[data-moss]').forEach((b) => b.setAttribute('aria-pressed', String(tool.kind === 'moss' && +b.dataset.moss === tool.t)));
+    document.querySelectorAll('[data-obj]').forEach((b) => b.setAttribute('aria-pressed', String(tool.kind === 'obj' && b.dataset.obj === tool.k)));
+    document.querySelectorAll('[data-size]').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.size === sizeIdx)));
+  }
+  function btn(parent, html, attrs, onClick) {
+    const b = document.createElement('button');
+    b.innerHTML = html;
+    for (const [k, v] of Object.entries(attrs)) b.setAttribute(k, v);
+    b.addEventListener('click', onClick);
+    parent.appendChild(b);
+    return b;
+  }
+  for (const [k, v] of Object.entries(VESSELS)) btn($('vessels'), v.n, { 'data-vessel': k }, () => loadVessel(k));
+  MOSS.forEach((m, i) => btn($('mosses'), `<i style="background:radial-gradient(circle at 35% 30%, ${m.light}, ${m.base} 55%, ${m.dark})"></i>${m.name}`,
+    { 'data-moss': i }, () => { tool = { kind: 'moss', t: i }; syncButtons(); }));
+  OBJS.forEach((o) => {
+    const b = btn($('objs'), '', { 'data-obj': o.k, 'aria-label': o.n, title: o.n }, () => { tool = { kind: 'obj', k: o.k }; syncButtons(); });
+    const c = document.createElement('canvas');
+    c.width = c.height = 44 * DPR;
+    const g = c.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    DRAW[o.k](g, 22, 38, 1.25, { seed: 5 });
+    b.appendChild(c);
+  });
+  SIZES.forEach((s, i) => btn($('sizes'), s.n, { 'data-size': i }, () => { sizeIdx = i; syncButtons(); }));
+  $('mistBtn').addEventListener('click', mist);
+  $('undoBtn').addEventListener('click', undo);
+  let armTimer = null;
+  $('clearBtn').addEventListener('click', (e) => {
+    const b = e.currentTarget;
+    if (!items.length) return;
+    if (!armTimer) {
+      b.textContent = 'ほんとに？';
+      armTimer = setTimeout(() => { b.textContent = '片づける'; armTimer = null; }, 2500);
+      return;
+    }
+    clearTimeout(armTimer); armTimer = null; b.textContent = '片づける';
+    items = []; rebuildHeights(); save(); renderLayer();
+  });
+  $('saveBtn').addEventListener('click', () => {
+    try {
+      const a = document.createElement('a');
+      a.href = layer.toDataURL('image/png');
+      a.download = `kokerium-${vesselKey}.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+    } catch { toast('この環境では保存できなかった'); }
+  });
+  window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+    if (e.key === 'm' || e.key === 'M') mist();
+    const n = +e.key;
+    if (n >= 1 && n <= MOSS.length) { tool = { kind: 'moss', t: n - 1 }; syncButtons(); }
+  });
+
+  // ---- Loop ----
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(50, now - last) / 1000; last = now;
+    for (const f of falling) { f.vy = Math.min(900, f.vy + 1500 * dt); f.y += f.vy * dt; }
+    const landed = falling.filter((f) => f.y + (f.kind === 'moss' ? f.rad * .6 : 0) >= surface(f.x));
+    if (landed.length) { falling = falling.filter((f) => !landed.includes(f)); landed.forEach(land); }
+    for (const p of particles) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 60 * dt; p.life -= dt; }
+    particles = particles.filter((p) => p.life > 0);
+    for (const m of motes) { m.y -= m.v * dt; if (m.y < -4) { m.y = H + 4; m.x = Math.random() * W; } }
+
+    const g = ctx;
+    g.drawImage(layer, 0, 0, W, H);
+
+    if (hoverX != null && !drag && inside(hoverX)) {
+      const sy = surface(hoverX);
+      g.strokeStyle = 'rgba(220,255,230,.25)'; g.setLineDash([3, 5]); g.lineWidth = 1;
+      g.beginPath(); g.moveTo(hoverX, 8); g.lineTo(hoverX, sy - 4); g.stroke(); g.setLineDash([]);
+    }
+    for (const f of falling) {
+      if (f.kind === 'moss') drawMossBall(g, f.t, f.x, f.y, f.rad, f.seed);
+      else drawObj(g, { k: f.k, x: f.x, y: f.y, s: f.s, flip: f.flip, seed: f.seed });
+    }
+    if (drag) {
+      if (drag.remove) {
+        g.fillStyle = 'rgba(200,90,70,.25)'; g.fillRect(0, 0, W, 34);
+        g.fillStyle = '#f2d6cf'; g.font = '12px "Hiragino Maru Gothic ProN", system-ui, sans-serif'; g.textAlign = 'center';
+        g.fillText('ここで離すと片づける', W / 2, 21);
+      } else {
+        g.fillStyle = 'rgba(220,255,230,.06)'; g.fillRect(0, 0, W, 34);
+      }
+      const o = drag.o;
+      drawObj(g, drag.remove ? { ...o, y: Math.min(o.y, 60) } : o, drag.remove ? .5 : 1);
+    }
+    for (const p of particles) {
+      g.globalAlpha = Math.max(0, Math.min(1, p.life * 1.5));
+      g.fillStyle = p.c; g.beginPath(); g.arc(p.x, p.y, 1.7, 0, 7); g.fill();
+    }
+    g.globalAlpha = 1;
+    for (const m of motes) {
+      g.fillStyle = `rgba(220,255,230,${.06 + .05 * Math.sin(now / 900 + m.p)})`;
+      g.beginPath(); g.arc(m.x + Math.sin(now / 1500 + m.p) * 5, m.y, m.r, 0, 7); g.fill();
+    }
+    const mk = (now - mistAt) / 1000;
+    if (mk >= 0 && mk < 6) {
+      g.save(); V.path(g); g.clip();
+      if (mk < 1.6) { g.fillStyle = `rgba(235,250,255,${.3 * (1 - mk / 1.6)})`; g.fillRect(0, 0, W, H); }
+      if (V.glass) {
+        g.fillStyle = `rgba(235,250,255,${.5 * (1 - mk / 6)})`;
+        for (const d of droplets) { g.beginPath(); g.arc(d.x, d.y + mk * 3, d.r, 0, 7); g.fill(); }
+      }
+      g.restore();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  loadVessel(vesselKey);
+  syncButtons();
+  requestAnimationFrame(frame);
+})();
+</script>
