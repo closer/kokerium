@@ -5,6 +5,7 @@
 <title>こけりうむ</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
+  /* Layout: vessel stage on the left, growth ladder + rewards on the right; stacks on phones. */
   :root {
     --bg: #101a14;
     --panel: #18261d;
@@ -12,6 +13,9 @@
     --text: #dfeee2;
     --muted: #8fae98;
     --accent: #a3c94a;
+    --btn: #223a2a;
+    --btn-on: #3a6646;
+    --warn: #e0806a;
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
@@ -20,145 +24,108 @@
     background: radial-gradient(ellipse at 50% 0%, #1d3326 0%, var(--bg) 70%);
     color: var(--text);
     font-family: "Hiragino Maru Gothic ProN", "Zen Maru Gothic", "Hiragino Sans", system-ui, sans-serif;
-    display: flex; align-items: center; justify-content: center;
     padding-block: 16px;
     padding-left: max(16px, env(safe-area-inset-left, 0px));
     padding-right: max(16px, env(safe-area-inset-right, 0px));
     user-select: none; -webkit-user-select: none;
   }
-  #app { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
-  .board-wrap { position: relative; }
-  #board {
-    display: block;
-    height: min(560px, 80vh); width: auto; aspect-ratio: 256 / 534; max-width: 100%;
-    border-radius: 14px;
-    border: 2px solid var(--line);
-    box-shadow: 0 0 0 6px #0c140f, 0 20px 50px rgba(0,0,0,.5);
+  .wrap { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: .15em; color: var(--accent); }
+  nav { display: flex; gap: 6px; font-size: 13px; }
+  nav a { color: var(--muted); text-decoration: none; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); }
+  nav a[aria-current] { color: var(--text); background: var(--btn-on); border-color: transparent; }
+  main { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; justify-content: center; }
+  .stage-wrap { position: relative; flex: 0 1 380px; min-width: 0; }
+  #stage {
+    display: block; width: 100%; max-width: 380px; aspect-ratio: 380 / 520; height: auto;
+    border-radius: 16px; background: #0c140f; box-shadow: 0 20px 50px rgba(0,0,0,.45);
+    touch-action: none; cursor: pointer;
   }
   #overlay {
-    position: absolute; inset: 0;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 10px; text-align: center;
-    background: rgba(10,18,13,.72); border-radius: 14px;
-    backdrop-filter: blur(2px);
+    position: absolute; inset: 0; border-radius: 16px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    text-align: center; padding: 20px; background: rgba(10,18,13,.78); backdrop-filter: blur(2px);
   }
-  #overlay.hidden { display: none; }
-  #overlay h2 { margin: 0; font-size: 28px; letter-spacing: .1em; color: var(--accent); }
-  #overlay p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
-  #overlay button, .side button {
-    font: inherit; color: var(--text); background: #2a4a33; border: 1px solid #3f6a4a;
-    padding: 8px 18px; border-radius: 999px; cursor: pointer;
+  #overlay[hidden] { display: none; }
+  #overlay h2 { margin: 0; font-size: 26px; letter-spacing: .1em; color: var(--accent); }
+  #overlay p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.8; }
+  #overlay p b { color: var(--text); font-size: 22px; }
+  .vessel-pick { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  button {
+    font: inherit; color: var(--text); background: var(--btn); border: 1px solid var(--line);
+    border-radius: 10px; cursor: pointer; padding: 8px 14px; font-size: 14px;
   }
-  #overlay button:hover, .side button:hover { background: #335a3e; }
-  .side { width: 240px; display: flex; flex-direction: column; gap: 14px; }
-  h1 { margin: 0; font-size: 22px; letter-spacing: .15em; color: var(--accent); }
+  button:hover { border-color: #4b7a57; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .vessel-pick button small { display: block; font-size: 11px; color: var(--muted); }
+  .side { flex: 1 1 260px; min-width: 0; max-width: 320px; display: flex; flex-direction: column; gap: 12px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
-  .row { display: flex; gap: 12px; }
-  .stats { flex: 1; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 13px; align-content: start; }
+  .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; letter-spacing: .05em; }
+  .row { display: flex; gap: 14px; align-items: center; }
+  #next { width: 64px; height: 64px; display: block; }
+  .stats { flex: 1; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 13px; margin: 0; }
   .stats dt { color: var(--muted); }
   .stats dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
-  .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-  #next { width: 84px; height: 84px; display: block; }
-  .nextname { font-size: 11px; color: var(--muted); text-align: center; margin-top: 4px; min-height: 1.4em; }
-  .actions { display: flex; gap: 8px; }
-  .actions button { flex: 1; font-size: 13px; padding: 8px 10px; }
-  .side button:disabled { opacity: .4; cursor: default; }
-  #album { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-  #album figure { margin: 0; text-align: center; }
-  #album img, #album .noimg { width: 100%; aspect-ratio: 256 / 534; display: block; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); }
-  #album figcaption { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  #album .empty { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--muted); }
-  #overlay b { color: var(--text); font-size: 22px; }
-  .help { font-size: 11px; color: var(--muted); line-height: 1.7; }
-  .jar-head { display: flex; justify-content: space-between; align-items: center; }
-  .jar-head button { padding: 2px 10px; font-size: 11px; }
-  #touch { display: none; gap: 8px; justify-content: center; margin-top: 10px; }
-  #touch button {
-    font: inherit; font-size: 20px; width: 52px; height: 52px; border-radius: 14px;
-    color: var(--text); background: #223a2a; border: 1px solid #3f6a4a;
-  }
-  @media (hover: none) { #touch { display: flex; } }
-  @media (max-width: 560px) {
-    .side { width: 100%; max-width: 340px; }
-    #board { height: min(520px, 60vh); }
-  }
-  .modes { display: flex; gap: 6px; font-size: 13px; }
-  .modes a { color: var(--muted); text-decoration: none; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); }
-  .modes a[aria-current] { color: var(--text); background: #3a6646; border-color: transparent; }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #ladder { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 4px; }
+  #ladder li { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: var(--muted); opacity: .45; }
+  #ladder li.seen { opacity: 1; color: var(--text); }
+  #ladder li.now { color: var(--accent); }
+  #ladder canvas { width: 36px; height: 36px; display: block; }
+  #log { font-size: 12px; color: var(--muted); line-height: 1.7; min-height: 3.4em; }
+  #log div:first-child { color: var(--text); }
+  .help { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
 </style>
-<div id="app">
-  <div>
-    <div class="board-wrap">
-      <canvas id="board"></canvas>
-      <div id="overlay">
-        <h2 id="ov-title">こけりうむ</h2>
-        <p id="ov-text">苔を瓶に植えていく。<br>隙間は苔が育って埋めてくれる。<br>瓶の縁まで届いたら完成。</p>
-        <button id="ov-btn">はじめる</button>
-      </div>
-    </div>
-    <div id="touch">
-      <button data-a="left" aria-label="左へ">←</button>
-      <button data-a="rot" aria-label="回転">↻</button>
-      <button data-a="right" aria-label="右へ">→</button>
-      <button data-a="drop" aria-label="落とす">⤓</button>
-      <button data-a="mist" aria-label="霧吹き">💧</button>
-    </div>
-  </div>
 
-  <div class="side">
+<div class="wrap">
+  <header>
     <h1>こけりうむ</h1>
-    <nav class="modes"><a href="./" aria-current="page">あつめる</a><a href="./garden.html">つくる</a></nav>
-    <div class="card row">
-      <div>
-        <div class="label">つぎ</div>
-        <canvas id="next"></canvas>
-        <div id="nextname" class="nextname"></div>
+    <nav><a href="./" aria-current="page">あつめる</a><a href="./garden.html">つくる</a></nav>
+  </header>
+  <main>
+    <div class="stage-wrap">
+      <canvas id="stage"></canvas>
+      <div id="overlay">
+        <h2 id="ov-title">苔玉ころころ</h2>
+        <p id="ov-text">同じ苔がくっつくと、ひとつ大きく育つ。<br>縁からあふれたらおしまい。<br>育てた苔と、そばで拾った置物は「つくる」で使える。</p>
+        <div class="vessel-pick" id="vpick"></div>
       </div>
-      <dl class="stats">
-        <dt>埋まり</dt><dd id="fill">0%</dd>
-        <dt>隙間</dt><dd id="holes">0</dd>
-        <dt>苔の種類</dt><dd id="kinds">0</dd>
-        <dt>見える小物</dt><dd id="decos">0</dd>
-        <dt>霧吹き</dt><dd id="mist">3</dd>
-      </dl>
     </div>
-    <div class="actions">
-      <button id="mistbtn">💧 霧吹き（C）</button>
-      <button id="lidbtn">ふたをする（F）</button>
-    </div>
-    <div class="card">
-      <div class="jar-head">
-        <div class="label">アルバム（ベスト <span id="best">0</span>）</div>
-        <button id="clearalbum">消す</button>
+    <div class="side">
+      <div class="card row">
+        <div><div class="label">つぎ</div><canvas id="next"></canvas></div>
+        <dl class="stats">
+          <dt>スコア</dt><dd id="score">0</dd>
+          <dt>ベスト</dt><dd id="best">0</dd>
+          <dt id="spill-dt">こぼれ</dt><dd id="spill">—</dd>
+        </dl>
       </div>
-      <div id="album"></div>
+      <div class="card">
+        <div class="label">育ち方</div>
+        <ol id="ladder"></ol>
+      </div>
+      <div class="card">
+        <div class="label">手に入れたもの</div>
+        <div id="log"></div>
+      </div>
+      <p class="help">
+        うつわの上でカーソルを動かして、クリックで落とす（スマホはなぞって離す）。← → と Space でも操作できる。<br>
+        置物は合体しないけど、そばで苔玉以上に育てると拾える。平皿は5回こぼすとおしまい。
+      </p>
     </div>
-    <div class="help">
-      ← → 移動 ／ ↓ ゆっくり ／ Space 落とす ／ ↑ X Z 回転<br>
-      C 霧吹き（近くの苔がぐっと育つ） ／ F ふたをして完成 ／ P 一時停止<br>
-      苔は同じ種類の方へ根を伸ばして、くぼみや隙間を埋めていく。小物は育たないので置き場所しだい。苔に埋もれた小物は見えなくなる。
-    </div>
-  </div>
+  </main>
 </div>
 
 <script>
 (() => {
   'use strict';
-
-  const COLS = 8, ROWS = 16, S = 32;
-  const BOARD_H = ROWS * S + 22;
+  const W = 380, H = 520;
   const DPR = Math.min(window.devicePixelRatio || 1, 2);
   const $ = (id) => document.getElementById(id);
-
-  function setupCanvas(c, w, h) {
-    c.width = w * DPR; c.height = h * DPR;
-    const g = c.getContext('2d');
-    g.setTransform(DPR, 0, 0, DPR, 0, 0);
-    return g;
-  }
-  const bctx = setupCanvas($('board'), COLS * S, BOARD_H);
-  const nctx = setupCanvas($('next'), 84, 84);
+  const stage = $('stage');
+  stage.width = W * DPR; stage.height = H * DPR;
+  const ctx = stage.getContext('2d');
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
   function rng(seed) {
     return function () {
@@ -182,7 +149,6 @@
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
   };
 
-  // ---- Moss types ----
   const MOSS = [
     { name: 'スナゴケ',         base: '#c2cf3a', dark: '#8a9520', light: '#e8f08a', style: 'star' },
     { name: 'ハイゴケ',         base: '#5f9e3f', dark: '#3d6f27', light: '#8fc56a', style: 'creep' },
@@ -192,103 +158,6 @@
     { name: 'コツボゴケ',       base: '#6cc06f', dark: '#3f8c45', light: '#aee6aa', style: 'leaf' },
     { name: 'シッポゴケ',       base: '#4f7f3a', dark: '#33572a', light: '#8bb86a', style: 'tail' },
   ];
-  // ---- Moss detail painters (cell-local, size S) ----
-  const STYLE = {
-    star(g, r, m) {
-      g.strokeStyle = m.light; g.lineWidth = 1;
-      for (let i = 0; i < 6; i++) {
-        const cx = 4 + r() * (S - 8), cy = 4 + r() * (S - 8);
-        for (let k = 0; k < 5; k++) {
-          const a = k * 1.2566 + r() * .3;
-          g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * 3, cy + Math.sin(a) * 3); g.stroke();
-        }
-      }
-    },
-    creep(g, r, m) {
-      g.lineWidth = 1.2;
-      for (let i = 0; i < 12; i++) {
-        g.strokeStyle = r() < .5 ? m.light : m.dark;
-        const x = r() * S, y = r() * S;
-        g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 3, y - 2, x + 6, y + 1); g.stroke();
-      }
-    },
-    ball(g, r, m) {
-      g.strokeStyle = m.light; g.lineWidth = 1;
-      for (let i = 0; i < 10; i++) {
-        const x = r() * S, y = 6 + r() * (S - 6);
-        g.beginPath(); g.moveTo(x, y); g.lineTo(x + (r() - .5) * 2, y - 3); g.stroke();
-      }
-      const n = 1 + ((r() * 3) | 0);
-      for (let i = 0; i < n; i++) {
-        const x = 6 + r() * (S - 12), y = 7 + r() * (S - 16);
-        g.strokeStyle = '#8a5a2b'; g.lineWidth = 1;
-        g.beginPath(); g.moveTo(x, y + 7); g.lineTo(x + 1, y); g.stroke();
-        g.fillStyle = '#d4ea86'; g.strokeStyle = '#5b7a2a';
-        g.beginPath(); g.arc(x + 1, y, 2.4, 0, 7); g.fill(); g.stroke();
-      }
-    },
-    tree(g, r, m) {
-      for (let i = 0; i < 3; i++) {
-        const x = 5 + r() * (S - 10), y = 8 + r() * (S - 10);
-        g.strokeStyle = m.dark; g.lineWidth = 1;
-        g.beginPath(); g.moveTo(x, y + 6); g.lineTo(x, y - 4); g.stroke();
-        g.strokeStyle = m.light;
-        for (let k = 0; k < 4; k++) {
-          const yy = y - 3 + k * 2, w = 1.5 + k;
-          g.beginPath(); g.moveTo(x - w, yy + 1); g.lineTo(x, yy); g.lineTo(x + w, yy + 1); g.stroke();
-        }
-      }
-    },
-    cushion(g, r, m) {
-      for (let i = 0; i < 6; i++) {
-        g.fillStyle = m.light; g.globalAlpha = .35 + r() * .25;
-        g.beginPath(); g.arc(r() * S, r() * S, 3 + r() * 4, 0, 7); g.fill();
-      }
-      g.globalAlpha = 1;
-    },
-    leaf(g, r, m) {
-      for (let i = 0; i < 12; i++) {
-        g.fillStyle = r() < .6 ? m.light : m.dark;
-        g.beginPath(); g.ellipse(r() * S, r() * S, 2.2, 1, r() * 3.14, 0, 7); g.fill();
-      }
-    },
-    tail(g, r, m) {
-      g.strokeStyle = m.light; g.lineWidth = 1.3; g.lineCap = 'round';
-      for (let i = 0; i < 6; i++) {
-        const x = 3 + r() * (S - 6), y = 6 + r() * (S - 8);
-        g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 4, y - 6, x + 1 + r() * 4, y - 9); g.stroke();
-      }
-    },
-  };
-
-  const sprites = new Map();
-  function sprite(t, v) {
-    const key = t * 16 + v;
-    let c = sprites.get(key);
-    if (c) return c;
-    c = document.createElement('canvas');
-    c.width = c.height = S * DPR;
-    const g = c.getContext('2d');
-    g.scale(DPR, DPR);
-    const m = MOSS[t], r = rng(key * 9973 + 17);
-    const grad = g.createLinearGradient(0, 0, 0, S);
-    grad.addColorStop(0, m.light); grad.addColorStop(.35, m.base); grad.addColorStop(1, m.dark);
-    rr(g, 1, 1, S - 2, S - 2, 7); g.fillStyle = grad; g.fill();
-    g.save();
-    rr(g, 1, 1, S - 2, S - 2, 7); g.clip();
-    for (let i = 0; i < 18; i++) {
-      g.fillStyle = r() < .5 ? m.dark : m.light;
-      g.globalAlpha = .3 + r() * .4;
-      g.beginPath(); g.arc(2 + r() * (S - 4), 2 + r() * (S - 4), .8 + r() * 1.8, 0, 7); g.fill();
-    }
-    g.globalAlpha = 1;
-    STYLE[m.style](g, r, m);
-    g.restore();
-    rr(g, 1, 1, S - 2, S - 2, 7);
-    g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = 1; g.stroke();
-    sprites.set(key, c);
-    return c;
-  }
 
   const DRAW = {
     mound(g, x, y, s, it) {
@@ -419,425 +288,532 @@
       g.beginPath(); g.arc(x, y - 24 * s, 1.5 * s, 0, 7); g.fill();
     },
   };
-
-  // ---- Pieces & cells ----
-  // Cell: {k:'moss', t, v, born?} | {k:'deco', d, seed}
-  const ACTIVE = [0, 2, 3, 4];
-  const RIM = 2;            // rows above this are outside the jar
-  const FLOOR = 22;         // soil band height in px
-  const MOSS_SHAPES = [
-    [[1]],
-    [[1,1],[0,0]],
-    [[1,1],[0,0]],
-    [[0,0,0],[1,1,1],[0,0,0]],
-    [[1,0],[1,1]],
-    [[1,1],[1,1]],
+  // ---- Growth stages ----
+  const STAGES = [
+    { n: '胞子', r: 10 },
+    { n: '芽', r: 14 },
+    { n: '若い苔', r: 19, m: 0 },
+    { n: 'ひと株', r: 25, m: 1 },
+    { n: '苔玉', r: 32, m: 2 },
+    { n: '大きな苔玉', r: 40, m: 4 },
+    { n: '苔山', r: 50, m: 3 },
+    { n: '苔の森', r: 62, m: 5 },
   ];
-  const DECOS = [
-    { d: 'stone', n: '石', w: 3 }, { d: 'fern', n: 'シダ', w: 3 },
-    { d: 'mushroom', n: 'きのこ', w: 3 }, { d: 'flower', n: '小花', w: 3 },
-    { d: 'deer', n: '白い鹿', w: 1 }, { d: 'torii', n: '鳥居', w: 1 },
-    { d: 'house', n: '小さな家', w: 1 }, { d: 'lantern', n: '石灯籠', w: 1 },
+  const FOREST_BONUS_MOSS = 6;
+  const POINTS = [0, 2, 5, 10, 20, 40, 80, 160];
+  const ORNAMENTS = [
+    { k: 'stone', n: '石', r: 15, w: 4 }, { k: 'mushroom', n: 'きのこ', r: 12, w: 3 },
+    { k: 'fern', n: 'シダ', r: 14, w: 3 }, { k: 'flower', n: '小花', r: 12, w: 3 },
+    { k: 'deer', n: '白い鹿', r: 18, w: 1 }, { k: 'lantern', n: '石灯籠', r: 17, w: 1 },
+    { k: 'torii', n: '鳥居', r: 19, w: 1 }, { k: 'house', n: '小さな家', r: 18, w: 1 },
   ];
-  const DECO_NAME = Object.fromEntries(DECOS.map((d) => [d.d, d.n]));
-  const pick = (a) => a[(Math.random() * a.length) | 0];
-  function pickDeco() {
-    let r = Math.random() * DECOS.reduce((s, d) => s + d.w, 0);
-    for (const d of DECOS) { if ((r -= d.w) < 0) return d.d; }
-    return 'stone';
-  }
-  const mossCell = (t) => ({ k: 'moss', t, v: 1 + ((Math.random() * 8) | 0) });
-
-  let state = 'title';
-  let grid, cur, next, sinceDeco, placed, mist, growAcc, dropAcc, lockT, lockResets, mistFx = -1e9;
-  let best = store.get('kokerium.best2', 0);
-  let album = store.get('kokerium.album.v1', []);
-  if (!Array.isArray(album)) album = [];
-  let particles = [];
-  const W = COLS * S, H = ROWS * S + FLOOR;
-  const motes = Array.from({ length: 16 }, () => ({
-    x: Math.random() * W, y: Math.random() * H, v: 4 + Math.random() * 8, r: .6 + Math.random() * 1.4, p: Math.random() * 6,
-  }));
-
-  function newPiece() {
-    sinceDeco++;
-    if (sinceDeco >= 4 && Math.random() < .3) {
-      sinceDeco = 0;
-      return { m: [[{ k: 'deco', d: pickDeco(), seed: (Math.random() * 1e9) | 0 }]] };
-    }
-    const shape = pick(MOSS_SHAPES), t = pick(ACTIVE), mixed = Math.random() < .25;
-    return { m: shape.map((row) => row.map((c) => (c ? mossCell(mixed ? pick(ACTIVE) : t) : null))) };
-  }
-  const rotCW = (m) => m[0].map((_, i) => m.map((row) => row[i]).reverse());
-  const rotCCW = (m) => m[0].map((_, i) => m.map((row) => row[row.length - 1 - i]));
-  function eachCell(p, fn) {
-    for (let r = 0; r < p.m.length; r++) for (let c = 0; c < p.m[r].length; c++) if (p.m[r][c]) fn(c, r, p.m[r][c]);
-  }
-  function collide(m, x, y) {
-    for (let r = 0; r < m.length; r++) for (let c = 0; c < m[r].length; c++) {
-      if (!m[r][c]) continue;
-      const nx = x + c, ny = y + r;
-      if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
-      if (ny >= 0 && grid[ny][nx]) return true;
-    }
-    return false;
+  const ORN = Object.fromEntries(ORNAMENTS.map((o) => [o.k, o]));
+  const DEFAULT_UNLOCKS = { moss: [0, 1], obj: ['stone'] };
+  function loadUnlocks() {
+    const u = store.get('kokerium.unlocks.v1', null) || {};
+    return {
+      moss: [...new Set([...(Array.isArray(u.moss) ? u.moss : []), ...DEFAULT_UNLOCKS.moss])],
+      obj: [...new Set([...(Array.isArray(u.obj) ? u.obj : []), ...DEFAULT_UNLOCKS.obj])],
+    };
   }
 
-  function reset() {
-    grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
-    sinceDeco = 0; placed = 0; mist = 3; growAcc = 0; particles = [];
-    next = newPiece();
-    spawn();
-    updateStats();
+  // ---- Vessels: inner boundary as a polyline (left rim -> floor -> right rim) ----
+  function arcPts(cx, cy, r, a0, a1, n) {
+    const pts = [];
+    for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
+    return pts;
   }
-  function spawn() {
-    cur = next; next = newPiece();
-    cur.x = ((COLS - cur.m[0].length) / 2) | 0;
-    cur.y = -cur.m.findIndex((row) => row.some(Boolean));
-    dropAcc = 0; lockT = 0; lockResets = 0;
-    drawNext();
-    if (collide(cur.m, cur.x, cur.y)) finish('もう植える場所がない');
-  }
-  function touchLock() { if (lockResets < 15) { lockT = 0; lockResets++; } }
-  function move(dx, dy) {
-    if (!cur || collide(cur.m, cur.x + dx, cur.y + dy)) return false;
-    cur.x += dx; cur.y += dy;
-    if (dx) touchLock();
-    return true;
-  }
-  function rotate(dir) {
-    if (!cur) return;
-    const m2 = dir > 0 ? rotCW(cur.m) : rotCCW(cur.m);
-    for (const [kx, ky] of [[0,0],[-1,0],[1,0],[0,-1]]) {
-      if (!collide(m2, cur.x + kx, cur.y + ky)) { cur.m = m2; cur.x += kx; cur.y += ky; touchLock(); return; }
+  const VESSELS = {
+    jar: {
+      n: '瓶', note: 'ふつう', rim: 118, open: [64, 316], glass: true,
+      pts: [[60, 96], [60, 438], ...arcPts(100, 438, 40, Math.PI, Math.PI / 2, 8).slice(1), ...arcPts(280, 438, 40, Math.PI / 2, 0, 8).slice(1), [320, 96]],
+      inner: [190, 300],
+    },
+    bowl: (() => {
+      const cx = 190, cy = 312, r = 176, rim = 168;
+      const a = Math.asin((rim - cy) / r);
+      return {
+        n: '丸い鉢', note: '口がせまい', rim: rim + 14, glass: true,
+        open: [cx - r * Math.cos(a) + 6, cx + r * Math.cos(a) - 6],
+        pts: arcPts(cx, cy, r, Math.PI - a, a, 48),
+        inner: [cx, cy], circle: { cx, cy, r, a },
+      };
+    })(),
+    dish: {
+      n: '平皿', note: 'こぼれやすい', rim: 250, open: [40, 340], glass: false, spill: 5,
+      pts: [[18, 426], [52, 468], [328, 468], [362, 426]],
+      inner: [190, 380],
+    },
+  };
+  for (const v of Object.values(VESSELS)) {
+    // Glass vessels get invisible walls rising from the rim so pops can't leap over the edge.
+    if (v.glass) {
+      const [lx, ly] = v.pts[0], [rx, ry] = v.pts[v.pts.length - 1];
+      v.phys = [[lx, -600], [lx, ly], ...v.pts.slice(1, -1), [rx, ry], [rx, -600]];
+    } else v.phys = v.pts;
+    v.segs = [];
+    for (let i = 0; i < v.phys.length - 1; i++) {
+      const [ax, ay] = v.phys[i], [bx, by] = v.phys[i + 1];
+      const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+      let nx = -dy, ny = dx;
+      const l = Math.hypot(nx, ny); nx /= l; ny /= l;
+      const mx = (ax + bx) / 2, my = (ay + by) / 2;
+      if ((v.inner[0] - mx) * nx + (v.inner[1] - my) * ny < 0) { nx = -nx; ny = -ny; }
+      v.segs.push({ ax, ay, dx, dy, len2, nx, ny });
     }
   }
-  function softDrop() { if (move(0, 1)) dropAcc = 0; }
-  function hardDrop() { if (!cur) return; while (move(0, 1)); lock(); }
-  function lock() {
-    let overRim = false;
-    eachCell(cur, (x, y, cell) => {
-      const gy = cur.y + y;
-      if (gy < RIM) overRim = true;
-      if (gy >= 0) grid[gy][cur.x + x] = cell;
-    });
-    cur = null;
-    placed++;
-    if (placed % 10 === 0 && mist < 5) mist++;
-    updateStats();
-    if (overRim) finish('縁まで届いた');
-    else spawn();
+  function vesselPath(g, v) {
+    g.beginPath();
+    v.pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
   }
 
-  // ---- Growth ----
-  const filled = (x, y) => y >= ROWS || (x >= 0 && x < COLS && y >= 0 && !!grid[y][x]);
-  function curCells() {
-    const set = new Set();
-    if (cur) eachCell(cur, (x, y) => set.add((cur.y + y) * COLS + cur.x + x));
-    return set;
+  // ---- Sprites ----
+  function accent(g, m, r, x, y, k) {
+    g.lineCap = 'round';
+    switch (m.style) {
+      case 'ball':
+        g.strokeStyle = '#8a5a2b'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x, y - 6 * k); g.stroke();
+        g.fillStyle = '#d4ea86'; g.strokeStyle = '#5b7a2a';
+        g.beginPath(); g.arc(x, y - 7 * k, 2.2 * k, 0, 7); g.fill(); g.stroke();
+        break;
+      case 'tree':
+        g.strokeStyle = m.light; g.lineWidth = 1;
+        for (let i = 0; i < 4; i++) { const yy = y - 6 * k + i * 2 * k, w = (1.2 + i) * k; g.beginPath(); g.moveTo(x - w, yy + k); g.lineTo(x, yy); g.lineTo(x + w, yy + k); g.stroke(); }
+        break;
+      case 'star':
+        g.strokeStyle = m.light; g.lineWidth = 1;
+        for (let i = 0; i < 5; i++) { const a = i * 1.2566; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * 3 * k, y + Math.sin(a) * 3 * k); g.stroke(); }
+        break;
+      case 'cushion':
+        g.fillStyle = m.light; g.globalAlpha = .5;
+        g.beginPath(); g.arc(x, y, (3 + r() * 3) * k, 0, 7); g.fill(); g.globalAlpha = 1;
+        break;
+      case 'leaf':
+        g.fillStyle = m.light;
+        for (let i = 0; i < 3; i++) { g.beginPath(); g.ellipse(x + (i - 1) * 3 * k, y - r() * 2, 2.2 * k, 1 * k, (i - 1) * .6, 0, 7); g.fill(); }
+        break;
+      case 'tail':
+        g.strokeStyle = m.light; g.lineWidth = 1.2;
+        g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 3 * k, y - 5 * k, x + r() * 3 * k, y - 8 * k); g.stroke();
+        break;
+      default:
+        g.strokeStyle = m.light; g.lineWidth = 1.2;
+        g.beginPath(); g.moveTo(x - 3 * k, y); g.quadraticCurveTo(x, y - 3 * k, x + 3 * k, y - 1); g.stroke();
+    }
+    g.lineCap = 'butt';
   }
-  // Moss spreads into empty cells that are cupped (2+ filled sides, floor counts, glass doesn't)
-  // and touch moss. This fills pockets, overhang gaps and steps, but never sprouts upward alone.
-  function growOnce(now) {
-    const busy = curCells();
-    const cands = [];
-    let total = 0;
-    for (let y = RIM; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-      if (grid[y][x] || busy.has(y * COLS + x)) continue;
-      let support = 0;
-      const moss = [];
-      for (const [dx, dy] of [[-1,0],[1,0],[0,1],[0,-1]]) {
-        const nx = x + dx, ny = y + dy;
-        if (nx < 0 || nx >= COLS) continue;
-        if (filled(nx, ny)) support++;
-        const c = ny < ROWS && ny >= 0 ? grid[ny][nx] : null;
-        if (c && c.k === 'moss') moss.push(c.t);
+  const spriteCache = new Map();
+  function stageSprite(s) {
+    if (spriteCache.has(s)) return spriteCache.get(s);
+    const R = STAGES[s].r, size = Math.ceil(R * 2 + 12), c = document.createElement('canvas');
+    c.width = c.height = size * DPR;
+    const g = c.getContext('2d');
+    g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const cx = size / 2, cy = size / 2, r = rng(s * 7919 + 3);
+    if (s === 0) {
+      const glow = g.createRadialGradient(cx, cy, 1, cx, cy, R + 5);
+      glow.addColorStop(0, 'rgba(255,240,180,.5)'); glow.addColorStop(1, 'rgba(255,240,180,0)');
+      g.fillStyle = glow; g.beginPath(); g.arc(cx, cy, R + 5, 0, 7); g.fill();
+      const gr = g.createRadialGradient(cx - 3, cy - 3, 1, cx, cy, R);
+      gr.addColorStop(0, '#f6ebc0'); gr.addColorStop(1, '#b0955a');
+      g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.fill();
+      g.fillStyle = 'rgba(120,90,40,.5)';
+      for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(cx + (r() - .5) * R, cy + (r() - .5) * R, 1, 0, 7); g.fill(); }
+    } else if (s === 1) {
+      const gr = g.createRadialGradient(cx - 4, cy - 4, 1, cx, cy, R);
+      gr.addColorStop(0, '#a6dc8a'); gr.addColorStop(1, '#4f8f3e');
+      g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.fill();
+      g.strokeStyle = '#3d6f27'; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(cx, cy + 2); g.lineTo(cx, cy - R * .5); g.stroke();
+      g.fillStyle = '#c7ef9c';
+      g.beginPath(); g.ellipse(cx - 4, cy - R * .5, 5, 2.4, -.5, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(cx + 4, cy - R * .55, 5, 2.4, .5, 0, 7); g.fill();
+    } else {
+      const m = MOSS[STAGES[s].m];
+      const gr = g.createRadialGradient(cx - R * .35, cy - R * .35, R * .1, cx, cy, R);
+      gr.addColorStop(0, m.light); gr.addColorStop(.45, m.base); gr.addColorStop(1, m.dark);
+      g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, R * .94, 0, 7); g.fill();
+      for (let i = 0; i < R * 3; i++) {
+        const a = r() * 6.283, d = Math.sqrt(r()) * R * .85;
+        g.fillStyle = [m.dark, m.base, m.light][(r() * 3) | 0];
+        g.globalAlpha = .3 + r() * .4;
+        g.beginPath(); g.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, 1 + r() * 2, 0, 7); g.fill();
       }
-      if (!filled(x, y + 1) && !filled(x, y - 1)) continue;
-      if (support < 2 || !moss.length) continue;
-      const w = moss.length * moss.length;
-      cands.push({ x, y, moss, w }); total += w;
-    }
-    if (!cands.length) return false;
-    let r = Math.random() * total, c = cands[0];
-    for (const k of cands) { if ((r -= k.w) < 0) { c = k; break; } }
-    grid[c.y][c.x] = { ...mossCell(pick(c.moss)), born: now };
-    for (let k = 0; k < 5; k++) particles.push({
-      x: c.x * S + S / 2, y: c.y * S + S / 2, vx: (Math.random() - .5) * 40, vy: -10 - Math.random() * 30,
-      life: .8 + Math.random() * .5, c: MOSS[grid[c.y][c.x].t].light,
-    });
-    return true;
-  }
-  function useMist() {
-    if (state !== 'playing' || mist <= 0) return;
-    const now = performance.now();
-    let n = 0;
-    for (let i = 0; i < 8; i++) if (growOnce(now + i * 60)) n++;
-    mist--; mistFx = now;
-    updateStats();
-  }
-
-  // ---- Evaluation ----
-  function evaluate() {
-    let fill = 0, holes = 0, decos = 0, shown = 0;
-    const kinds = new Set();
-    for (let y = RIM; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-      const c = grid[y][x];
-      if (!c) continue;
-      fill++;
-      if (c.k === 'moss') kinds.add(c.t);
-      else {
-        decos++;
-        const above = y > RIM ? grid[y - 1][x] : null;
-        if (!above || above.k !== 'moss') shown++;
+      g.globalAlpha = 1;
+      const n = Math.round(R * 1.6);
+      for (let i = 0; i < n; i++) {
+        const a = i / n * 6.283 + r() * .1, rad = R * (.1 + r() * .08);
+        g.fillStyle = r() < .5 ? m.light : m.base;
+        g.globalAlpha = .9;
+        g.beginPath(); g.arc(cx + Math.cos(a) * (R - rad * .8), cy + Math.sin(a) * (R - rad * .8), rad, 0, 7); g.fill();
+      }
+      g.globalAlpha = 1;
+      const k = Math.min(1.6, .7 + R / 50);
+      for (let i = 0; i < R / 5; i++) {
+        const a = r() * 6.283, d = Math.sqrt(r()) * R * .7;
+        accent(g, m, r, cx + Math.cos(a) * d, cy + Math.sin(a) * d, k);
       }
     }
-    for (let x = 0; x < COLS; x++) {
-      let roof = false;
-      for (let y = RIM; y < ROWS; y++) { if (grid[y][x]) roof = true; else if (roof) holes++; }
+    spriteCache.set(s, c);
+    return c;
+  }
+  function drawBody(g, b, alpha = 1) {
+    g.save();
+    g.globalAlpha = alpha;
+    if (b.kind === 'moss') {
+      const sp = stageSprite(b.s), size = sp.width / DPR;
+      const pop = b.born ? Math.min(1, (performance.now() - b.born) / 180) : 1;
+      g.translate(b.x, b.y); g.rotate(b.ang); g.scale(.6 + .4 * pop, .6 + .4 * pop);
+      g.drawImage(sp, -size / 2, -size / 2, size, size);
+    } else {
+      g.fillStyle = 'rgba(220,240,225,.08)';
+      g.beginPath(); g.arc(b.x, b.y, b.r, 0, 7); g.fill();
+      (DRAW[b.k] || DRAW.stone)(g, b.x, b.y + b.r * .85, b.r / 12, b);
     }
-    const pct = fill / (COLS * (ROWS - RIM));
-    const score = Math.max(0, Math.round(pct * 600 + kinds.size * 40 + shown * 50 - holes * 15));
-    return { pct, holes, kinds: kinds.size, decos, shown, score };
-  }
-  function rankOf(score) {
-    if (score >= 850) return '見事な瓶';
-    if (score >= 650) return 'よく育った瓶';
-    if (score >= 400) return '育ちざかりの瓶';
-    return 'はじまりの瓶';
+    g.restore();
+    g.lineCap = 'butt';
   }
 
-  function finish(reason) {
-    state = 'done'; cur = null;
-    const e = evaluate(), rank = rankOf(e.score);
-    drawBoard(performance.now());
-    let img = '';
-    try {
-      const c = document.createElement('canvas');
-      c.width = 72; c.height = Math.round(72 * H / W);
-      c.getContext('2d').drawImage($('board'), 0, 0, c.width, c.height);
-      img = c.toDataURL('image/jpeg', .8);
-    } catch { /* thumbnail is optional */ }
-    album.unshift({ img, score: e.score, rank, at: Date.now() });
-    album = album.slice(0, 12);
-    store.set('kokerium.album.v1', album);
-    if (e.score > best) { best = e.score; store.set('kokerium.best2', best); }
-    renderAlbum();
-    updateStats();
-    showOverlay(rank,
-      `${reason}。<br>埋まり ${Math.round(e.pct * 100)}% ／ 隙間 ${e.holes}<br>苔 ${e.kinds} 種 ／ 見える小物 ${e.shown}<br><b>${e.score}</b> 点`,
-      'もうひと瓶つくる');
+  // ---- Game state ----
+  let state = 'title', vKey = 'jar', V = VESSELS.jar;
+  let bodies = [], particles = [], floaters = [];
+  let aimX = 190, held = null, nextP = null, cooldown = 0, sinceOrn = 0;
+  let score = 0, spills = 0, dangerT = 0, maxStage = 0, seen = new Set();
+  let best = store.get('kokerium.merge.best', {});
+  if (typeof best !== 'object' || !best) best = {};
+  let unlocks = loadUnlocks();
+  let logLines = [];
+
+  function randPiece() {
+    sinceOrn++;
+    if (sinceOrn >= 6 && Math.random() < .25) {
+      sinceOrn = 0;
+      let x = Math.random() * ORNAMENTS.reduce((a, o) => a + o.w, 0);
+      const o = ORNAMENTS.find((o) => (x -= o.w) < 0) || ORNAMENTS[0];
+      return { kind: 'orn', k: o.k, r: o.r, seed: (Math.random() * 1e9) | 0 };
+    }
+    const w = [5, 4, 3, 2], sum = 14;
+    let x = Math.random() * sum, s = 0;
+    while ((x -= w[s]) >= 0) s++;
+    return { kind: 'moss', s, r: STAGES[s].r };
+  }
+  function makeBody(p, x, y) {
+    return { ...p, x, y, px: x, py: y, ang: 0, age: 0, dead: false, born: performance.now() };
   }
 
-  function showOverlay(title, text, btn) {
-    $('ov-title').textContent = title;
-    $('ov-text').innerHTML = text;
-    $('ov-btn').textContent = btn;
-    $('overlay').classList.remove('hidden');
-  }
-  function start() {
-    reset();
+  function start(key) {
+    vKey = key; V = VESSELS[key];
+    bodies = []; particles = []; floaters = [];
+    score = 0; spills = 0; dangerT = 0; maxStage = 0; sinceOrn = 0; seen = new Set([0]);
+    aimX = (V.open[0] + V.open[1]) / 2;
+    held = randPiece(); nextP = randPiece(); cooldown = 0;
     state = 'playing';
-    $('overlay').classList.add('hidden');
+    $('overlay').hidden = true;
+    logLines = [];
+    renderLog(); renderLadder(); updateStats(); drawNext();
   }
-  function togglePause() {
-    if (state === 'playing') { state = 'paused'; showOverlay('ひとやすみ', '苔は待っててくれる。', 'つづける'); }
-    else if (state === 'paused') { state = 'playing'; $('overlay').classList.add('hidden'); }
+  function dropHeld() {
+    if (state !== 'playing' || !held || cooldown > 0) return;
+    const x = clampAim(aimX, held.r);
+    bodies.push(makeBody(held, x, 52));
+    held = null; cooldown = .45;
   }
-  $('ov-btn').addEventListener('click', () => (state === 'paused' ? togglePause() : start()));
-  $('mistbtn').addEventListener('click', useMist);
-  $('lidbtn').addEventListener('click', () => { if (state === 'playing') finish('ふたをした'); });
+  function clampAim(x, r) { return Math.max(V.open[0] + r, Math.min(V.open[1] - r, x)); }
 
-  function updateStats() {
-    if (!grid) return;
-    const e = evaluate();
-    $('fill').textContent = `${Math.round(e.pct * 100)}%`;
-    $('holes').textContent = e.holes;
-    $('kinds').textContent = e.kinds;
-    $('decos').textContent = e.shown;
-    $('mist').textContent = '💧'.repeat(mist) || '—';
-    $('best').textContent = best;
-    $('mistbtn').disabled = state !== 'playing' || mist <= 0;
+  function unlock(type, id, name) {
+    const list = unlocks[type];
+    if (list.includes(id)) return;
+    list.push(id);
+    store.set('kokerium.unlocks.v1', unlocks);
+    logLines.unshift(`★ ${name}が「つくる」で使えるようになった`);
+    renderLog();
   }
-  function renderAlbum() {
-    $('best').textContent = best;
-    $('album').innerHTML = album.length
-      ? album.map((a) => `<figure>${a.img ? `<img src="${a.img}" alt="${a.rank}">` : '<div class="noimg"></div>'}<figcaption>${a.score}</figcaption></figure>`).join('')
-      : '<p class="empty">完成した瓶がここに並ぶ。</p>';
-  }
-  let armTimer = null;
-  $('clearalbum').addEventListener('click', (e) => {
-    const b = e.currentTarget;
-    if (!album.length) return;
-    if (!armTimer) {
-      b.textContent = 'ほんとに？';
-      armTimer = setTimeout(() => { b.textContent = '消す'; armTimer = null; }, 2500);
-      return;
+
+  // ---- Physics ----
+  const GRAV = 1300, SUB = 5, ITER = 5;
+  function physics(dt) {
+    const h = dt / SUB;
+    for (let s = 0; s < SUB; s++) {
+      for (const b of bodies) {
+        let vx = (b.x - b.px) * .996, vy = (b.y - b.py) * .996;
+        const sp = Math.hypot(vx, vy), cap = 7;
+        if (sp > cap) { vx *= cap / sp; vy *= cap / sp; }
+        b.px = b.x; b.py = b.y;
+        b.x += vx; b.y += vy + GRAV * h * h;
+        if (b.kind === 'moss') b.ang += vx / b.r;
+        b.age += h;
+      }
+      const merges = [];
+      for (let it = 0; it < ITER; it++) {
+        for (let i = 0; i < bodies.length; i++) {
+          const a = bodies[i];
+          if (a.dead) continue;
+          for (let j = i + 1; j < bodies.length; j++) {
+            const b = bodies[j];
+            if (b.dead) continue;
+            const dx = b.x - a.x, dy = b.y - a.y, min = a.r + b.r;
+            const d2 = dx * dx + dy * dy;
+            if (d2 >= min * min || d2 === 0) continue;
+            if (a.kind === 'moss' && b.kind === 'moss' && a.s === b.s) {
+              a.dead = b.dead = true; merges.push([a, b]); continue;
+            }
+            const d = Math.sqrt(d2), o = (min - d), nx = dx / d, ny = dy / d;
+            const ma = a.r * a.r, mb = b.r * b.r, t = ma + mb;
+            a.x -= nx * o * mb / t; a.y -= ny * o * mb / t;
+            b.x += nx * o * ma / t; b.y += ny * o * ma / t;
+          }
+        }
+        for (const b of bodies) if (!b.dead) collideVessel(b);
+      }
+      for (const [a, b] of merges) merge(a, b);
+      bodies = bodies.filter((b) => !b.dead);
     }
-    clearTimeout(armTimer); armTimer = null; b.textContent = '消す';
-    album = []; store.set('kokerium.album.v1', album); renderAlbum();
+  }
+  function collideVessel(b) {
+    for (const sg of V.segs) {
+      let t = ((b.x - sg.ax) * sg.dx + (b.y - sg.ay) * sg.dy) / sg.len2;
+      t = Math.max(0, Math.min(1, t));
+      const cx = sg.ax + sg.dx * t, cy = sg.ay + sg.dy * t;
+      const ex = b.x - cx, ey = b.y - cy, d = Math.hypot(ex, ey);
+      const side = ex * sg.nx + ey * sg.ny;
+      let nx, ny, push;
+      if (side < 0 && t > 0 && t < 1 && d < b.r * 1.2) { nx = sg.nx; ny = sg.ny; push = b.r + d; }
+      else if (d < b.r && d > 0) { nx = ex / d; ny = ey / d; push = b.r - d; }
+      else continue;
+      b.x += nx * push; b.y += ny * push;
+      let vx = b.x - b.px, vy = b.y - b.py;
+      const vn = vx * nx + vy * ny;
+      if (vn < 0) { vx -= nx * vn * 1.15; vy -= ny * vn * 1.15; }
+      vx *= .985; vy *= .985;
+      b.px = b.x - vx; b.py = b.y - vy;
+    }
+    // Safety nets: keep bodies between the glass walls (jar everywhere, bowl above its mouth)
+    // and inside the sphere below the bowl's mouth.
+    if (V.glass) {
+      const lx = V.pts[0][0], rx = V.pts[V.pts.length - 1][0];
+      if (!V.circle || b.y < V.pts[0][1]) {
+        if (b.x < lx + b.r) { b.x = lx + b.r; b.px = b.x; }
+        else if (b.x > rx - b.r) { b.x = rx - b.r; b.px = b.x; }
+      }
+    }
+    const c = V.circle;
+    if (c && b.y > c.cy + Math.sin(c.a) * c.r) {
+      const dx = b.x - c.cx, dy = b.y - c.cy, d = Math.hypot(dx, dy), lim = c.r - b.r;
+      if (d > lim) { const k = lim / d; b.x = c.cx + dx * k; b.y = c.cy + dy * k; b.px = b.x; b.py = b.y; }
+    }
+  }
+  function merge(a, b) {
+    const s = a.s;
+    const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
+    const vx = ((a.x - a.px) + (b.x - b.px)) / 2, vy = ((a.y - a.py) + (b.y - b.py)) / 2;
+    burst(x, y, s >= 2 ? MOSS[STAGES[s].m].light : '#f6ebc0', 8 + s * 3);
+    if (s === STAGES.length - 1) {
+      score += 500;
+      floaters.push({ x, y, t: 0, text: '森が根づいた +500' });
+      unlock('moss', FOREST_BONUS_MOSS, MOSS[FOREST_BONUS_MOSS].name);
+      collectNear(x, y, STAGES[s].r * 2.2);
+    } else {
+      const ns = s + 1;
+      const nb = makeBody({ kind: 'moss', s: ns, r: STAGES[ns].r }, x, y);
+      nb.px = x - vx; nb.py = y - vy; nb.ang = a.ang;
+      bodies.push(nb);
+      score += POINTS[ns];
+      if (ns >= 3) floaters.push({ x, y: y - STAGES[ns].r, t: 0, text: STAGES[ns].n });
+      seen.add(ns); maxStage = Math.max(maxStage, ns);
+      if (STAGES[ns].m != null) unlock('moss', STAGES[ns].m, MOSS[STAGES[ns].m].name);
+      if (ns >= 4) collectNear(x, y, STAGES[ns].r + 26);
+      renderLadder();
+    }
+    updateStats();
+  }
+  function collectNear(x, y, reach) {
+    for (const o of bodies) {
+      if (o.kind !== 'orn' || o.dead) continue;
+      if (Math.hypot(o.x - x, o.y - y) < reach + o.r) {
+        o.dead = true;
+        burst(o.x, o.y, '#f2e6c8', 14);
+        floaters.push({ x: o.x, y: o.y - o.r, t: 0, text: `${ORN[o.k].n}を拾った` });
+        score += 30;
+        unlock('obj', o.k, ORN[o.k].n);
+      }
+    }
+  }
+  function burst(x, y, c, n) {
+    for (let k = 0; k < n; k++) {
+      const a = Math.random() * 6.283, sp = 30 + Math.random() * 90;
+      particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 30, life: .5 + Math.random() * .5, c });
+    }
+  }
+
+  function gameOver(reason) {
+    state = 'over';
+    const prev = best[vKey] || 0;
+    if (score > prev) { best[vKey] = score; store.set('kokerium.merge.best', best); }
+    updateStats();
+    $('ov-title').textContent = 'おしまい';
+    $('ov-text').innerHTML = `${reason}<br><b>${score}</b> 点（${V.n}）<br>いちばん育ったのは「${STAGES[maxStage].n}」`;
+    $('overlay').hidden = false;
+  }
+
+  // ---- UI ----
+  function updateStats() {
+    $('score').textContent = score;
+    $('best').textContent = best[vKey] || 0;
+    $('spill').textContent = V.spill ? `${spills} / ${V.spill}` : '—';
+  }
+  function renderLog() {
+    $('log').innerHTML = logLines.length ? logLines.slice(0, 5).map((l) => `<div>${l}</div>`).join('') : '苔を育てたり置物を拾ったりすると、ここに出る。';
+  }
+  const ladderCanvases = [];
+  STAGES.forEach((st, i) => {
+    const li = document.createElement('li');
+    const c = document.createElement('canvas');
+    c.width = c.height = 36 * DPR;
+    const g = c.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const sp = stageSprite(i), k = Math.min(1, 30 / (sp.width / DPR)), sz = sp.width / DPR * k;
+    g.drawImage(sp, 18 - sz / 2, 18 - sz / 2, sz, sz);
+    li.appendChild(c);
+    const span = document.createElement('span'); span.textContent = st.n; li.appendChild(span);
+    $('ladder').appendChild(li);
+    ladderCanvases.push(li);
   });
+  function renderLadder() {
+    ladderCanvases.forEach((li, i) => {
+      li.classList.toggle('seen', seen.has(i));
+      li.classList.toggle('now', i === maxStage && maxStage > 0);
+    });
+  }
+  const nctx = (() => { const c = $('next'); c.width = c.height = 64 * DPR; const g = c.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0); return g; })();
+  function drawNext() {
+    nctx.clearRect(0, 0, 64, 64);
+    if (!nextP) return;
+    const p = { ...nextP, x: 32, y: 32, ang: 0 };
+    if (p.kind === 'moss') {
+      const sp = stageSprite(p.s), k = Math.min(1, 56 / (sp.width / DPR)), sz = sp.width / DPR * k;
+      nctx.drawImage(sp, 32 - sz / 2, 32 - sz / 2, sz, sz);
+    } else drawBody(nctx, p);
+  }
+  for (const [k, v] of Object.entries(VESSELS)) {
+    const b = document.createElement('button');
+    b.innerHTML = `${v.n}<small>${v.note}</small>`;
+    b.addEventListener('click', () => start(k));
+    $('vpick').appendChild(b);
+  }
 
   // ---- Input ----
-  const act = {
-    left: () => move(-1, 0), right: () => move(1, 0), down: softDrop,
-    rot: () => rotate(1), rotl: () => rotate(-1), drop: hardDrop, mist: useMist,
-  };
-  const KEYS = {
-    ArrowLeft: 'left', ArrowRight: 'right', ArrowDown: 'down', ArrowUp: 'rot',
-    x: 'rot', X: 'rot', z: 'rotl', Z: 'rotl', ' ': 'drop', c: 'mist', C: 'mist',
-  };
+  function toLocalX(e) { const r = stage.getBoundingClientRect(); return (e.clientX - r.left) * W / r.width; }
+  stage.addEventListener('pointermove', (e) => { aimX = toLocalX(e); });
+  stage.addEventListener('pointerdown', (e) => { aimX = toLocalX(e); if (e.pointerType === 'mouse') dropHeld(); });
+  stage.addEventListener('pointerup', (e) => { if (e.pointerType !== 'mouse') { aimX = toLocalX(e); dropHeld(); } });
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { togglePause(); e.preventDefault(); return; }
-    if (state !== 'playing') {
-      if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { state === 'paused' ? togglePause() : start(); e.preventDefault(); }
-      return;
-    }
-    if ((e.key === 'f' || e.key === 'F') && !e.repeat) { finish('ふたをした'); return; }
-    const a = KEYS[e.key];
-    if (!a) return;
-    e.preventDefault();
-    if (e.repeat && (a === 'drop' || a === 'mist')) return;
-    if (a !== 'mist' && !cur) return;
-    act[a]();
-  });
-  window.addEventListener('blur', () => { if (state === 'playing') togglePause(); });
-  document.querySelectorAll('#touch button').forEach((b) => {
-    b.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      if (state === 'playing') act[b.dataset.a]();
-    });
+    if (state !== 'playing') return;
+    if (e.key === 'ArrowLeft') { aimX -= 12; e.preventDefault(); }
+    else if (e.key === 'ArrowRight') { aimX += 12; e.preventDefault(); }
+    else if (e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); if (!e.repeat) dropHeld(); }
   });
 
-  // ---- Rendering ----
-  function drawCell(g, cell, px, py, size, now) {
-    if (cell.k === 'moss') {
-      const k = cell.born ? Math.min(1, Math.max(0, (now - cell.born) / 350)) : 1;
-      if (k <= 0) return;
-      const sz = size * (.4 + .6 * k), o = (size - sz) / 2;
-      g.drawImage(sprite(cell.t, cell.v), px + o, py + o, sz, sz);
-    } else {
-      g.fillStyle = 'rgba(60,40,28,.55)';
-      rr(g, px + 2, py + size - 7, size - 4, 6, 3); g.fill();
-      g.fillStyle = 'rgba(120,170,90,.35)';
-      rr(g, px + 4, py + size - 8, size - 8, 3, 1.5); g.fill();
-      const s = size / 32;
-      (DRAW[cell.d] || DRAW.stone)(g, px + size / 2, py + size - 4, s * .95, cell);
-      g.lineCap = 'butt';
-    }
-  }
-  function drawBoard(now) {
-    const g = bctx, GH = ROWS * S;
+  // ---- Render ----
+  function draw(now) {
+    const g = ctx;
     const bg = g.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#1a2c21'); bg.addColorStop(1, '#0f1b14');
+    bg.addColorStop(0, '#1a2c21'); bg.addColorStop(1, '#0e1812');
     g.fillStyle = bg; g.fillRect(0, 0, W, H);
 
-    // outside the jar (above the rim)
-    g.fillStyle = 'rgba(200,230,210,.05)'; g.fillRect(0, 0, W, RIM * S);
-    g.strokeStyle = 'rgba(210,250,230,.35)'; g.lineWidth = 1.5; g.setLineDash([5, 5]);
-    g.beginPath(); g.moveTo(0, RIM * S + .5); g.lineTo(W, RIM * S + .5); g.stroke(); g.setLineDash([]);
-    g.fillStyle = 'rgba(210,250,230,.4)'; g.font = '11px "Hiragino Maru Gothic ProN", system-ui, sans-serif';
-    g.textAlign = 'right'; g.fillText('瓶の縁', W - 6, RIM * S - 5);
-
-    for (const m of motes) {
-      g.fillStyle = `rgba(220,255,230,${.07 + .06 * Math.sin(now / 900 + m.p)})`;
-      g.beginPath(); g.arc(m.x + Math.sin(now / 1500 + m.p) * 6, m.y, m.r, 0, 7); g.fill();
+    // back of vessel
+    if (V.glass) {
+      g.fillStyle = 'rgba(0,0,0,.3)';
+      g.beginPath(); g.ellipse(190, V.pts[Math.floor(V.pts.length / 2)][1] + 12, 130, 8, 0, 0, 7); g.fill();
+      vesselPath(g, V); g.closePath(); g.fillStyle = 'rgba(170,220,195,.07)'; g.fill();
+      // soil bed at the bottom
+      g.save(); vesselPath(g, V); g.closePath(); g.clip();
+      const lowY = Math.max(...V.pts.map((p) => p[1]));
+      const sg = g.createLinearGradient(0, lowY - 26, 0, lowY);
+      sg.addColorStop(0, '#5c4231'); sg.addColorStop(1, '#3a2a1f');
+      g.fillStyle = sg; g.fillRect(0, lowY - 22, W, 30);
+      g.restore();
     }
 
-    // soil floor
-    const sg = g.createLinearGradient(0, GH, 0, H);
-    sg.addColorStop(0, '#4a3426'); sg.addColorStop(.5, '#3a2a1f'); sg.addColorStop(1, '#55504a');
-    g.fillStyle = sg; g.fillRect(0, GH, W, FLOOR);
-    const fr = rng(11);
-    for (let i = 0; i < 60; i++) {
-      g.fillStyle = ['#6e685f', '#2b1f17', '#8a847a'][(fr() * 3) | 0];
-      g.fillRect(fr() * W, GH + 4 + fr() * (FLOOR - 6), 2, 2);
+    // danger line
+    const warn = dangerT > 0;
+    g.strokeStyle = warn ? `rgba(224,128,106,${.5 + .4 * Math.sin(now / 90)})` : 'rgba(210,250,230,.22)';
+    g.lineWidth = 1.5; g.setLineDash([6, 6]);
+    g.beginPath(); g.moveTo(V.open[0] - 10, V.rim); g.lineTo(V.open[1] + 10, V.rim); g.stroke(); g.setLineDash([]);
+
+    // aim guide + held piece
+    if (state === 'playing' && held) {
+      const x = clampAim(aimX, held.r);
+      g.strokeStyle = 'rgba(220,255,230,.18)'; g.setLineDash([3, 6]); g.lineWidth = 1;
+      g.beginPath(); g.moveTo(x, 52 + held.r); g.lineTo(x, H - 30); g.stroke(); g.setLineDash([]);
+      drawBody(g, { ...held, x, y: 52, ang: 0 });
     }
 
-    if (grid) for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-      const c = grid[y][x];
-      if (c && c.k === 'moss') drawCell(g, c, x * S, y * S, S, now);
-    }
-    if (grid) for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-      const c = grid[y][x];
-      if (c && c.k === 'deco') drawCell(g, c, x * S, y * S, S, now);
-    }
+    for (const b of bodies) drawBody(g, b);
 
-    if (cur && state === 'playing') {
-      let gy = cur.y;
-      while (!collide(cur.m, cur.x, gy + 1)) gy++;
-      g.strokeStyle = 'rgba(200,240,200,.3)'; g.lineWidth = 1.5; g.setLineDash([3, 3]);
-      eachCell(cur, (x, y) => { if (gy + y >= 0) { rr(g, (cur.x + x) * S + 3, (gy + y) * S + 3, S - 6, S - 6, 6); g.stroke(); } });
-      g.setLineDash([]);
-      eachCell(cur, (x, y, c) => { if (cur.y + y >= 0) drawCell(g, c, (cur.x + x) * S, (cur.y + y) * S, S, now); });
+    // vessel front
+    if (V.glass) {
+      vesselPath(g, V);
+      g.strokeStyle = 'rgba(210,250,230,.5)'; g.lineWidth = 2.5; g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,.14)'; g.lineWidth = 6; g.lineCap = 'round';
+      if (vKey === 'jar') { g.beginPath(); g.moveTo(76, 140); g.lineTo(76, 400); g.stroke(); }
+      else { const c = V.circle; g.beginPath(); g.arc(c.cx, c.cy, c.r - 16, Math.PI * 1.02, Math.PI * 1.3); g.stroke(); }
+      g.lineCap = 'butt';
+    } else {
+      const grad = g.createLinearGradient(0, 426, 0, 490);
+      grad.addColorStop(0, '#5a6f86'); grad.addColorStop(1, '#2e3b4c');
+      g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(190, 494, 170, 8, 0, 0, 7); g.fill();
+      g.fillStyle = grad;
+      g.beginPath(); g.moveTo(14, 428); g.lineTo(52, 472); g.lineTo(328, 472); g.lineTo(366, 428);
+      g.quadraticCurveTo(350, 486, 312, 488); g.lineTo(68, 488); g.quadraticCurveTo(30, 486, 14, 428); g.closePath(); g.fill();
+      g.strokeStyle = '#8aa0b8'; g.lineWidth = 3; g.lineCap = 'round';
+      vesselPath(g, V); g.stroke(); g.lineCap = 'butt';
     }
 
     for (const p of particles) {
-      g.globalAlpha = Math.max(0, Math.min(1, p.life));
-      g.fillStyle = p.c;
-      g.beginPath(); g.arc(p.x, p.y, 1.6, 0, 7); g.fill();
+      g.globalAlpha = Math.max(0, Math.min(1, p.life * 1.6));
+      g.fillStyle = p.c; g.beginPath(); g.arc(p.x, p.y, 2, 0, 7); g.fill();
     }
     g.globalAlpha = 1;
-
-    const mk = (now - mistFx) / 1400;
-    if (mk >= 0 && mk < 1) {
-      g.fillStyle = `rgba(235,250,255,${.35 * (1 - mk)})`;
-      g.fillRect(0, RIM * S, W, GH - RIM * S);
+    g.textAlign = 'center';
+    g.font = 'bold 13px "Hiragino Maru Gothic ProN", system-ui, sans-serif';
+    for (const f of floaters) {
+      g.globalAlpha = Math.max(0, 1 - f.t / 1.2);
+      g.fillStyle = '#f0ffe0';
+      g.fillText(f.text, f.x, f.y - f.t * 30);
     }
-
-    // glass
-    g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 5; g.lineCap = 'round';
-    g.beginPath(); g.moveTo(10, RIM * S + 30); g.lineTo(10, GH - 60); g.stroke();
-    g.lineWidth = 3;
-    g.beginPath(); g.moveTo(W - 10, RIM * S + 40); g.lineTo(W - 10, RIM * S + 70); g.stroke();
-    g.lineCap = 'butt';
-    const v = g.createRadialGradient(W / 2, H / 2, H * .3, W / 2, H / 2, H * .75);
-    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.3)');
-    g.fillStyle = v; g.fillRect(0, 0, W, H);
-  }
-  function drawNext() {
-    const g = nctx;
-    g.clearRect(0, 0, 84, 84);
-    if (!next) return;
-    let minX = 9, maxX = -1, minY = 9, maxY = -1;
-    eachCell(next, (x, y) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); });
-    const s = next.m.length === 1 ? 40 : 24, w = (maxX - minX + 1) * s, h = (maxY - minY + 1) * s;
-    const ox = (84 - w) / 2, oy = (84 - h) / 2;
-    eachCell(next, (x, y, c) => drawCell(g, c, ox + (x - minX) * s, oy + (y - minY) * s, s, 0));
-    const first = next.m.flat().find(Boolean);
-    const kinds = new Set(next.m.flat().filter(Boolean).map((c) => c.t));
-    $('nextname').textContent = first.k === 'deco' ? DECO_NAME[first.d] : kinds.size > 1 ? 'まぜ苔' : MOSS[first.t].name;
+    g.globalAlpha = 1;
   }
 
   // ---- Loop ----
   let last = performance.now();
   function frame(now) {
-    const dt = Math.min(50, now - last); last = now;
-    const sec = dt / 1000;
-    for (const m of motes) { m.y -= m.v * sec; if (m.y < -4) { m.y = H + 4; m.x = Math.random() * W; } }
-    for (const p of particles) { p.x += p.vx * sec; p.y += p.vy * sec; p.vy += 20 * sec; p.life -= sec; }
-    particles = particles.filter((p) => p.life > 0);
-
+    const dt = Math.min(1 / 30, (now - last) / 1000); last = now;
     if (state === 'playing') {
-      growAcc += dt;
-      if (growAcc >= 1700) { growAcc = 0; if (growOnce(now)) updateStats(); }
-      if (cur) {
-        dropAcc += dt;
-        if (dropAcc >= 850) { dropAcc = 0; move(0, 1); }
-        if (cur && collide(cur.m, cur.x, cur.y + 1)) {
-          lockT += dt;
-          if (lockT > 500) lock();
-        } else {
-          lockT = 0;
+      physics(dt);
+      if (cooldown > 0) { cooldown -= dt; if (cooldown <= 0) { held = nextP; nextP = randPiece(); drawNext(); } }
+      // spills (dish) and overflow
+      for (const b of bodies) {
+        if (b.y > H + 60) {
+          b.dead = true;
+          if (V.spill) { spills++; floaters.push({ x: Math.max(30, Math.min(W - 30, b.x)), y: H - 40, t: 0, text: 'こぼれた' }); }
         }
       }
+      bodies = bodies.filter((b) => !b.dead);
+      updateStats();
+      if (V.spill && spills >= V.spill) gameOver('お皿からこぼれすぎた。');
+      const over = bodies.some((b) => b.age > 1.2 && b.y - b.r < V.rim && Math.hypot(b.x - b.px, b.y - b.py) < 2);
+      dangerT = over ? dangerT + dt : 0;
+      if (dangerT > 2.2 && state === 'playing') gameOver('縁からあふれた。');
     }
-    drawBoard(now);
+    for (const p of particles) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 160 * dt; p.life -= dt; }
+    particles = particles.filter((p) => p.life > 0);
+    for (const f of floaters) f.t += dt;
+    floaters = floaters.filter((f) => f.t < 1.2);
+    draw(now);
     requestAnimationFrame(frame);
   }
 
-  renderAlbum();
-  drawBoard(performance.now());
+  renderLog(); renderLadder(); updateStats();
   requestAnimationFrame(frame);
 })();
 </script>

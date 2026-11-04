@@ -49,6 +49,7 @@
     border-radius: 10px; cursor: pointer; padding: 6px 12px; font-size: 13px;
   }
   button:hover { border-color: #4b7a57; }
+  button:disabled { opacity: .3; cursor: not-allowed; }
   button[aria-pressed="true"] { background: var(--btn-on); border-color: var(--accent); }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .swatches button { display: flex; align-items: center; gap: 6px; padding: 5px 10px 5px 6px; font-size: 12px; }
@@ -88,7 +89,7 @@
         <button id="saveBtn">画像を保存</button>
       </section>
       <p class="help">うつわの中をタップすると、選んだ苔や置物がそこに降ってくる。置物はドラッグで動かせて、いちばん上まで持っていくと片づく。Ctrl+Z で戻す。</p>
-      <p class="note">試作中：置物はいまは全部使える。そのうち「あつめる」で手に入れたものだけ使える形にする。</p>
+      <p class="note" id="unlockNote"></p>
     </div>
   </main>
 </div>
@@ -361,7 +362,17 @@
   if (!VESSELS[vesselKey]) vesselKey = 'jar';
   let gardens = store.get('kokerium.garden.v1', {});
   if (typeof gardens !== 'object' || !gardens) gardens = {};
-  let tool = { kind: 'moss', t: 4 };
+  // Unlocks are earned in the merge game (index.html) and shared via localStorage.
+  const DEFAULT_UNLOCKS = { moss: [0, 1], obj: ['stone'] };
+  function loadUnlocks() {
+    const u = store.get('kokerium.unlocks.v1', null) || {};
+    return {
+      moss: [...new Set([...(Array.isArray(u.moss) ? u.moss : []), ...DEFAULT_UNLOCKS.moss])],
+      obj: [...new Set([...(Array.isArray(u.obj) ? u.obj : []), ...DEFAULT_UNLOCKS.obj])],
+    };
+  }
+  let unlocks = loadUnlocks();
+  let tool = { kind: 'moss', t: unlocks.moss[0] };
   let sizeIdx = 1;
   let V, soilTop, mossH, xmin, xmax;
   let items = [];
@@ -676,6 +687,24 @@
     b.appendChild(c);
   });
   SIZES.forEach((s, i) => btn($('sizes'), s.n, { 'data-size': i }, () => { sizeIdx = i; syncButtons(); }));
+  function applyLocks() {
+    unlocks = loadUnlocks();
+    document.querySelectorAll('[data-moss]').forEach((b) => {
+      const ok = unlocks.moss.includes(+b.dataset.moss);
+      b.disabled = !ok; b.title = ok ? '' : '「あつめる」で育てると使える';
+    });
+    document.querySelectorAll('[data-obj]').forEach((b) => {
+      const ok = unlocks.obj.includes(b.dataset.obj), n = OBJ[b.dataset.obj].n;
+      b.disabled = !ok; b.title = ok ? n : `${n}（「あつめる」で拾うと使える）`;
+    });
+    if ((tool.kind === 'moss' && !unlocks.moss.includes(tool.t)) || (tool.kind === 'obj' && !unlocks.obj.includes(tool.k))) {
+      tool = { kind: 'moss', t: unlocks.moss[0] };
+    }
+    $('unlockNote').textContent = `いま使えるのは苔 ${unlocks.moss.length}/${MOSS.length} 種と置物 ${unlocks.obj.length}/${OBJS.length} 個。ほかは「あつめる」で育てたり拾ったりすると増える。`;
+    syncButtons();
+  }
+  window.addEventListener('focus', applyLocks);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) applyLocks(); });
   $('mistBtn').addEventListener('click', mist);
   $('undoBtn').addEventListener('click', undo);
   let armTimer = null;
@@ -702,7 +731,7 @@
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
     if (e.key === 'm' || e.key === 'M') mist();
     const n = +e.key;
-    if (n >= 1 && n <= MOSS.length) { tool = { kind: 'moss', t: n - 1 }; syncButtons(); }
+    if (n >= 1 && n <= MOSS.length && unlocks.moss.includes(n - 1)) { tool = { kind: 'moss', t: n - 1 }; syncButtons(); }
   });
 
   // ---- Loop ----
@@ -762,7 +791,7 @@
   }
 
   loadVessel(vesselKey);
-  syncButtons();
+  applyLocks();
   requestAnimationFrame(frame);
 })();
 </script>
